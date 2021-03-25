@@ -192,7 +192,7 @@ def interpolation(img1, img2, imap, mask=None):
     return (img1 * imap + img2 * (1 - imap)) * mask + img1 * (1 - mask)
 
 
-def background_border(width: int, height: int):
+def background_border(width: int, height: int, seed=1):
     border = np.zeros((width, height))
     mask = border.copy()
 
@@ -218,11 +218,11 @@ def background_border(width: int, height: int):
     ### WARP BORDERLINE ###
     if random.random() > 0.4:
         if random.random() > 0.5:
-            #BORDER WITH CURVE AT END#
+            # BORDER WITH CURVE AT END#
             mask = elastic(mask, 700, 14, seed)
             border = elastic(border, 700, 14, seed)
         else:
-            #NORMAL WARPING#
+            # NORMAL WARPING#
             mask = elastic(mask, 15, 3, seed)
             border = elastic(border, 15, 3, seed)
     border = blur(border, (5, 5))
@@ -276,21 +276,55 @@ def background_floaters(width: int, height: int):
     return floater, mask
 
 
-def base_background(width: int, height: int, seed: int, color_variation=(-35, 35)):
+def base_background(width: int, height: int, seed: int, color_variation=(-35, 35), border_memory=None, mask_memory=None,
+                    draw_border=True):
     background_color_variation = randomness(color_variation[0], color_variation[1])
+    if border_memory is None or mask_memory is None:
+        border, mask = background_border(width, height)
+    else:
+        border = border_memory
+        mask = mask_memory
     ### BACKGROUND NOISE CLEAN ###
     background = minmax(genNoise(width, 1, seed), 100 + background_color_variation, 110 + background_color_variation)[:,
                  :, 0]
     background = blur(background, (3, 3))
     background += ((minmax(genNoise(width, 1, seed), -1, 1))[:, :, 0]) * 15
     background += ((minmax(genNoise(width, 0.01, seed), -1, 1))[:, :, 0]) * 10
-    return background
+    mask = mask * 255.
+    mask[mask > 150] = 255
+    mask[mask > 255] = 255
+
+    if color_variation != (-35, 35):
+        border[mask == 255] += background_color_variation
+
+    border[border > 255] = 255
+    border[border < 0] = 0
+    mask = mask / 255.
+    if not draw_border:
+        mask = np.zeros((width, height))
+    background = background * (1 - mask) + border * mask
+    # color_indication = np.round(np.median(np.median(background, 0), 0))
+
+    if (border_memory is not None) or (mask_memory is not None):
+        return background
+    else:
+        return background, border, mask
 
 
 def background(width: int, height: int, seed: int, alternative=False):
-    background = base_background(width, height, seed)
-    alt_background = base_background(width, height, seed, (-50, 50))
-    clean_background = background.copy()
+    if random.random() > 0.4:
+        draw_borders = True
+    else:
+        draw_borders = False
+
+    background, border, mask = base_background(100, 100, seed, draw_border=draw_borders)
+    if random.random() > 0.5:
+        alt_color_variation = (0, 50)
+    else:
+        alt_color_variation = (-50, 0)
+    alt_background = base_background(100, 100, seed, alt_color_variation, border_memory=border, mask_memory=mask,
+                                     draw_border=draw_borders)
+
     ## BLACK PIXEL GROUPS ON BACKGROUND ##
     for pixels in range(7):
         pixels = np.zeros((width, height))
@@ -300,30 +334,13 @@ def background(width: int, height: int, seed: int, alternative=False):
         background *= pixels
         alt_background *= pixels
 
-
-    clean_background = background.copy()
     if random.random() > 0.1:
         # kleine zwarte en witte drolletjes
         if random.random() > 0.33:
             pixels, mask = background_floaters(width, height)
             background = background * (1 - mask) + pixels * mask
-            clean_background = background.copy()
 
-    if random.random() > 0.20:
-        border, mask = background_border(width, height)
-        mask = mask * 255.
-        # imageio.imwrite('mask6.png', mask.astype('uint8'))
 
-        interpol = minmax(genNoise(width, 0.2, seed), 0, 1)[:, :, 0]
-        tmp = interpol * border + background * (1 - interpol)
-        # border[mask == 180] = tmp[mask == 180]
-        mask[mask > 150] = 255
-        # imageio.imwrite('mask6.png', mask.astype('uint8'))
-        mask = mask / 255.
-        background = background * (1 - mask) + border * mask
-        alt_background = alt_background * (1 - mask) + border * mask
-    clean_background = background.copy()
-    # imageio.imwrite('mask6.png', mask.astype('uint8'))
     if random.random() > 0.7:
         stripe = np.zeros((width, height))
         l = 25
@@ -332,15 +349,16 @@ def background(width: int, height: int, seed: int, alternative=False):
         stripe = cv.line(img=stripe, pt1=first, pt2=sec, color=255, thickness=randomness(1, 3))
         stripe = elastic(stripe, 500, 6)
         background *= (255 - stripe) / 255
+        alt_background *= (255 - stripe) / 255
     if alternative:
         if random.random() > 0.1:
             # kleine zwarte en witte drolletjes
-            if random.random() > 0.2:
-                pixels, mask = background_floaters(width, height)
-                alt_background = alt_background * (1 - mask) + pixels * mask
-        #alt_background *= minmax(genNoise(width, 0.0007, seed)[:, :, 0], 0, 1)
+            pixels, mask = background_floaters(width, height)
+            alt_background = alt_background * (1 - mask) + pixels * mask
 
+    # background[background > 255] = 255
+    # background[background < 0] = 0
     if alternative:
-        return background, clean_background, alt_background
+        return background, alt_background
     else:
-        return background, clean_background
+        return background

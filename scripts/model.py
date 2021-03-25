@@ -8,6 +8,13 @@ from skimage.feature import peak_local_max
 from datetime import datetime
 import os
 import gc
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--bullet_perc', help=' percentage bullet (between 0 and 1).', default=1, type=float)
+parser.add_argument('--round_perc', help=' percentage round (between 0 and 1).', default=1, type=float)
+args = parser.parse_args()
+
 if os.environ.get("PREFIX") is None:
     prefix = "/media/joshua/Red Blood Cells/"
 else:
@@ -55,7 +62,7 @@ y_bullet_gauss, y_round_guass = torch.load(prefix + "bullet_cells_labels_gauss.p
 y_bullet, y_round = torch.load(prefix + "bullet_cells_labels.pt").float() / 255., torch.load(
     prefix + "round_cells_labels.pt").float() / 255.
 
-bullet_percentage, round_percentage = len(y_bullet) * 1, len(y_round) * 1
+bullet_percentage, round_percentage = len(y_bullet) * args.bullet_perc, len(y_round) * args.round_perc
 
 X = torch.cat((x_bullet[:bullet_percentage], x_round[:round_percentage]), 0)
 y_gauss = torch.cat((y_bullet_gauss[:bullet_percentage], y_round_guass[:round_percentage]), 0)
@@ -103,7 +110,7 @@ def train(X, y, mini_batch_size: int):
             y_minib = y[positions[mb:mb + mini_batch_size]]
             y_gauss_minib = y_gauss[positions[mb:mb + mini_batch_size]]
             y_pred, y_pred_gauss = model(x_minib)
-            weight = y_minib * 0.98 + (1 - y_minib) * 0.02  # same size as y
+            #weight = y_minib * 0.98 + (1 - y_minib) * 0.02  # same size as y
             loss_train = F.binary_cross_entropy(y_pred, y_minib.float())
             loss_train_gauss = F.binary_cross_entropy(y_pred_gauss, y_gauss_minib.float())
             total_loss = loss_train + loss_train_gauss
@@ -115,10 +122,9 @@ def train(X, y, mini_batch_size: int):
                 best_loss = loss_train.item()
             if loss_train.item() >= best_loss:
                 count += 1
-            # if count > 100:
-            #     done = True
+
             total_loss.backward()
-            # loss_train_gauss.backward()
+
             optimizer.step()
             optimizer.zero_grad()
             if epoch % 10 == 0:
@@ -129,21 +135,18 @@ def train(X, y, mini_batch_size: int):
             epoch += 1
 
 
-test = {"002": [torch.tensor(cv2.imread("/home/joshua/Stage 2021/resources/002_2.5kfps/002_2.5kfps_98.png", 0)) / 255,
-                torch.tensor(cv2.imread("/home/joshua/Stage 2021/scripts/median_real_002.png", 0)) / 255],
-        "K1": [torch.tensor(cv2.imread("/home/joshua/Stage 2021/resources/K1_001_20201105/K1_001_20201105_168.png",
+test = {"002": [torch.tensor(cv2.imread(prefix + "resources/002_2.5kfps/002_2.5kfps_98.png", 0)) / 255,
+                torch.tensor(cv2.imread(prefix + "median_real_002.png", 0)) / 255],
+        "K1": [torch.tensor(cv2.imread(prefix + "resources/K1_001_20201105/K1_001_20201105_168.png",
                                        0)) / 255,
-               torch.tensor(cv2.imread("/home/joshua/Stage 2021/scripts/median_real_K1.png", 0)) / 255],
+               torch.tensor(cv2.imread(prefix + "median_real_K1.png", 0)) / 255],
         "NF": [
-            torch.tensor(cv2.imread("/home/joshua/Stage 2021/resources/NF135_002_20201105/NF135_002_20201105_157.png",
+            torch.tensor(cv2.imread(prefix + "resources/NF135_002_20201105/NF135_002_20201105_157.png",
                                     0)) / 255,
-            torch.tensor(cv2.imread("/home/joshua/Stage 2021/scripts/median_real_NF.png", 0)) / 255]}
+            torch.tensor(cv2.imread(prefix + "median_real_NF.png", 0)) / 255]}
 
 
 def evaluate(model, num):
-    # xtest = torch.tensor(test_images["002"])
-    # for key, value in test.items():
-    #     print(value)
     t1 = torch.cat((test["002"][0].unsqueeze(0), test["002"][1].unsqueeze(0)), 0)
     t2 = torch.cat((test["K1"][0].unsqueeze(0), test["K1"][1].unsqueeze(0)), 0)
     t3 = torch.cat((test["NF"][0].unsqueeze(0), test["NF"][1].unsqueeze(0)), 0)
