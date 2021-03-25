@@ -11,8 +11,8 @@ import gc
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--bullet_perc', help=' percentage bullet (between 0 and 1).', default=1, type=float)
-parser.add_argument('--round_perc', help=' percentage round (between 0 and 1).', default=1, type=float)
+parser.add_argument('--bullet_perc', help=' percentage bullet (between 0 and 1).', default=1)
+parser.add_argument('--round_perc', help=' percentage round (between 0 and 1).', default=1)
 args = parser.parse_args()
 
 if os.environ.get("PREFIX") is None:
