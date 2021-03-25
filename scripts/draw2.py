@@ -9,9 +9,14 @@ import time
 from skimage.segmentation import flood_fill
 from multiprocessing import Pool, cpu_count
 from methods import *
+
 random.seed(0)
 randomness = random.randint
 
+if os.environ.get("PREFIX") is None:
+    prefix = "/media/joshua/Red Blood Cells/"
+else:
+    prefix = os.environ.get("PREFIX")
 
 def round_red_blood_cell(image):
     image = np.zeros((100, 100))
@@ -46,23 +51,26 @@ def round_red_blood_cell(image):
     kern = np.zeros((width, height))
     kern = add_circle(kern, (50 + random.randint(-5, 5), 50 + random.randint(-5, 5)), 5, 255, -1)
     kern = (255 - elastic(kern, 300, 12)) / 255
-
+    if random.random() > 0.9:
+        warp_num = 12
+    else:
+        warp_num = 8
     noise = minmax(genNoise(width, 0.2, seeds[0]), 0, 220)[:, :, 0]
     image[image == 70] = noise[image == 70]
     image *= kern
-    image = elastic(image, 200, 12, seeds[1])
+    image = elastic(image, 200, warp_num, seeds[1])
 
     ### MASK ###
     mask = np.zeros((width, height))
     mask = add_circle(mask, center, outer_radius, 255, outer_thickness_variation)
     mask = add_circle(mask, center, middle_radius, 255, middle_thickness_variation)
     mask = add_circle(mask, center, inner_radius, 200, -1)
-    mask = elastic(mask, 200, 12, seeds[1])
+    mask = elastic(mask, 200, warp_num, seeds[1])
     label = mask.copy()
     if random.random() < 0.35:
         mask[mask > 210] *= minmax(genNoise(width, 0.3)[:, :, 0], 0, 1.1)[mask > 210]
-    imageio.imwrite("mask.png", mask.astype("uint8"))
-    imageio.imwrite("label.png", label.astype("uint8"))
+    # imageio.imwrite("mask.png", mask.astype("uint8"))
+    # imageio.imwrite("label.png", label.astype("uint8"))
 
     image[mask < 120] = -10
     # image = blur(image, (3, 3))
@@ -70,8 +78,7 @@ def round_red_blood_cell(image):
 
     ### BACKGROUND ###
 
-    bg, clean_bg, alt = background(width=width, height=height, seed=seeds[0], alternative=True)
-
+    bg, alt = background(width=width, height=height, seed=seeds[0], alternative=True)
 
     ### EXTRACT CELL w/ MASK  ###
     cell = np.zeros((width, height))
@@ -87,9 +94,9 @@ def round_red_blood_cell(image):
     image[image > 255] = 255
     image[image < 0] = 0
     label[label > 0] = 255
-    imageio.imwrite("label.png", label.astype("uint8"))
-    if random.random() > 0.8:
-        cell = alt
+    # imageio.imwrite("label.png", label.astype("uint8"))
+    if random.random() > 0.5:
+        cell = bg
         label = np.zeros((width, height))
     if np.sum(label) != 0:
         label_gauss = generate_instancing_labels(label)
@@ -98,8 +105,7 @@ def round_red_blood_cell(image):
     else:
         label_gauss = label
 
-
-    return cell, label, bg, label_gauss
+    return cell, label, alt, label_gauss
 
 
 def bullet_red_blood_cell(image):
@@ -131,7 +137,7 @@ def bullet_red_blood_cell(image):
     label = cell.copy()
     label[cell_border == outer_color] = 255
 
-    imageio.imwrite("label_b.png", label.astype("uint8"))
+    # imageio.imwrite("label_b.png", label.astype("uint8"))
     label = flood_fill(label, center, 255)
     if random.random() > 0.3:
         angle = randomness(-30, 30)
@@ -160,7 +166,7 @@ def bullet_red_blood_cell(image):
     cell = elastic(cell, 400, 17, seed=seeds[1])
     label = elastic(label, 400, 17, seed=seeds[1])
 
-    bg, clean_bg, alt = background(width=width, height=height, seed=seeds[0], alternative=True)
+    bg, alt = background(width=width, height=height, seed=seeds[0], alternative=True)
 
     mask_complete = elastic(mask_complete, 400, 17, seed=seeds[1])
     mask_complete = mask_complete / 255.
@@ -168,8 +174,8 @@ def bullet_red_blood_cell(image):
     cell[cell < 0] = 0
     cell[cell > 255] = 255
 
-    if random.random() > 0.9:
-        cell = alt
+    if random.random() > 0.8:
+        cell = bg
         label = np.zeros((width, height))
     if np.sum(label) != 0:
         label_gauss = generate_instancing_labels(label)
@@ -177,7 +183,7 @@ def bullet_red_blood_cell(image):
         label_gauss[label_gauss > 255] = 255
     else:
         label_gauss = label
-    return cell, label, clean_bg, label_gauss
+    return cell, label, alt, label_gauss
 
 
 def genImg(func):
@@ -230,19 +236,23 @@ def generate_images(func, out_filename: str):
 
     end = time.time() - start
 
+
 #genImg(round_red_blood_cell)
-#genImg(bullet_red_blood_cell)
+
+
+# genImg(bullet_red_blood_cell)
 
 def heat(img):
     new = torch.zeros(img.shape[0], img.shape[1], 3)
-    red = torch.tensor([128,0,0]).reshape(-1,1)
-    blue = torch.tensor([0,0,128]).reshape(-1,1)
-    white = torch.tensor([255,255,255]).reshape(-1,1)
-    new[img<0.5] = ((img[img<.5]*2) * white + (1-(img[img<.5]*2)) * blue).permute(1,0)
-    new[img > 0.5] = (((img[img > .5] -.5) * 2) * red + (1-((img[img > .5] -.5) * 2)) * white).permute(1,0)
+    red = torch.tensor([128, 0, 0]).reshape(-1, 1)
+    blue = torch.tensor([0, 0, 128]).reshape(-1, 1)
+    white = torch.tensor([255, 255, 255]).reshape(-1, 1)
+    new[img < 0.5] = ((img[img < .5] * 2) * white + (1 - (img[img < .5] * 2)) * blue).permute(1, 0)
+    new[img > 0.5] = (((img[img > .5] - .5) * 2) * red + (1 - ((img[img > .5] - .5) * 2)) * white).permute(1, 0)
     imageio.imwrite('heatmap.png', new.numpy().astype('uint8'))
 
-heat(torch.tensor(cv.imread('evalutate.png')[:,:,0])/255.)
-prefix = "/media/joshua/Red Blood Cells/"
-# generate_images(round_red_blood_cell, "prefix+round_cells")
-# generate_images(bullet_red_blood_cell, "prefix+bullet_cells")
+
+#heat(torch.tensor(cv.imread('evalutate.png')[:, :, 0]) / 255.)
+#prefix = "/media/joshua/Red Blood Cells/"
+generate_images(round_red_blood_cell, prefix + "round_cells")
+generate_images(bullet_red_blood_cell, prefix + "bullet_cells")
