@@ -62,7 +62,7 @@ y_bullet_gauss, y_round_guass = torch.load(prefix + "bullet_cells_labels_gauss.p
 y_bullet, y_round = torch.load(prefix + "bullet_cells_labels.pt").float() / 255., torch.load(
     prefix + "round_cells_labels.pt").float() / 255.
 
-bullet_percentage, round_percentage = len(y_bullet) * args.bullet_perc, len(y_round) * args.round_perc
+bullet_percentage, round_percentage = len(y_bullet) * float(args.bullet_perc), len(y_round) * float(args.round_perc)
 
 X = torch.cat((x_bullet[:bullet_percentage], x_round[:round_percentage]), 0)
 y_gauss = torch.cat((y_bullet_gauss[:bullet_percentage], y_round_guass[:round_percentage]), 0)
