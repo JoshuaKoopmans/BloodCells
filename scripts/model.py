@@ -16,7 +16,7 @@ parser.add_argument('--round_perc', help=' percentage round (between 0 and 1).',
 args = parser.parse_args()
 
 if os.environ.get("PREFIX") is None:
-    prefix = "/media/joshua/Red Blood Cells/"
+    prefix = "/mnt/cellstorage/"
 else:
     prefix = os.environ.get("PREFIX")
 torch.manual_seed(0)
@@ -62,7 +62,7 @@ y_bullet_gauss, y_round_guass = torch.load(prefix + "bullet_cells_labels_gauss.p
 y_bullet, y_round = torch.load(prefix + "bullet_cells_labels.pt").float() / 255., torch.load(
     prefix + "round_cells_labels.pt").float() / 255.
 
-bullet_percentage, round_percentage = len(y_bullet) * float(args.bullet_perc), len(y_round) * float(args.round_perc)
+bullet_percentage, round_percentage = int(len(y_bullet) * float(args.bullet_perc)), int(len(y_round) * float(args.round_perc))
 
 X = torch.cat((x_bullet[:bullet_percentage], x_round[:round_percentage]), 0)
 y_gauss = torch.cat((y_bullet_gauss[:bullet_percentage], y_round_guass[:round_percentage]), 0)
