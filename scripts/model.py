@@ -14,7 +14,7 @@ parser.add_argument("--type", help="Choose which model type to run.", choices=["
                     default="normal")
 parser.add_argument("--stop_epoch", help="Indicate at which epoch the training should be stopped.", type=int,
                     default=-1)
-parser.add_argument("--name", help="Indicate folder name where model results are saved.", default=None)
+parser.add_argument("--name", help="Indicate folder name where model results are saved.", default="")
 args = parser.parse_args()
 
 torch.manual_seed(0)
@@ -27,7 +27,7 @@ if os.environ.get("PREFIX") is None:
 else:
     prefix = os.environ.get("PREFIX")
 
-model_id = datetime.now().strftime("%d%m%Y-%H%M%S%p") if args.name is not None else str(args.name)
+model_id = datetime.now().strftime("%d%m%Y-%H%M%S%p") + str(args.name)
 model_dir = "{}model_runs/{}/".format(prefix, model_id)
 if not os.path.isdir("{}model_runs/".format(prefix)):
     os.mkdir("{}model_runs/".format(prefix))
