@@ -80,6 +80,7 @@ def train(X, y, mini_batch_size: int):
 
             total_loss.backward()
 
+            torch.nn.utils.clip_grad_value_(model.parameters(), 1)
             optimizer.step()
             optimizer.zero_grad()
             if epoch % 10 == 0:
