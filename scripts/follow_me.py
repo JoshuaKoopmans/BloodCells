@@ -7,12 +7,12 @@ import imageio
 import torch
 import numpy as np
 import cv2 as cv
-from scripts.config import PREFIX
-from scripts.Models import NetTracking, NetExperiment
-from scripts.methods import to_3d
+from config import PREFIX
+from Models import NetTracking, NetExperiment
+from methods import to_3d
 from skimage.feature import peak_local_max
 from Cell import Cell
-from scripts.methods import blur
+from methods import blur
 
 CELL_INITIALIZATION_THRESHOLD = 70
 CELL_JOURNEY_COMPLETION_THRESHOLD = 40
