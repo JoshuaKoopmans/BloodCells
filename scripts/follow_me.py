@@ -175,7 +175,7 @@ def process_frame(video_path, frame_num_start, frame_num_end):
 
 #path = PREFIX + "resources/nice_raw_data/"
 
-process_frame(sys.argv[1], sys.argv[2], sys.argv[3])
+process_frame(sys.argv[1], int(sys.argv[2]), int(sys.argv[3]))
 
 # with imageio.get_writer('NF135_002_20201105.avi', mode='I') as writer:  # duration=0.2 (=standard)
 #     ret, frames = cv.imreadmulti("/mnt/cellstorage/resources/raw_data/NF135_002_20201105.tif", flags=cv.IMREAD_GRAYSCALE)
