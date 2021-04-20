@@ -1,5 +1,4 @@
 import gc
-import glob
 import os
 import sys
 
@@ -8,7 +7,7 @@ import torch
 import numpy as np
 import cv2 as cv
 from config import PREFIX
-from Models import NetTracking, NetExperiment
+from Models import NetTracking, NetExperiment, NetExperimentDAN
 from methods import to_3d
 from skimage.feature import peak_local_max
 from Cell import Cell
@@ -37,38 +36,27 @@ def get_coordinates(img, img2=None, text="", verbose=False) -> (torch.Tensor, np
         img2 = cv.circle(img2, center=(coord[1], coord[0]), radius=20, thickness=2, color=255)
         if coord[1] <= CELL_INITIALIZATION_THRESHOLD:
             img2 = cv.circle(img2, center=(coord[1], coord[0]), radius=30, thickness=1, color=255)
-    # cv.imwrite("circles{}.png".format(text), img2 * 255)
     return coordinates, img2
 
 
 def get_closest_coordinate(prediction: tuple, next_frame_coordinate_list: np.ndarray):
     distances = np.linalg.norm(prediction - next_frame_coordinate_list, axis=1)
-    # minimum_distance = np.amin(distances)
-    # minimum_distance_index = np.where(distances == minimum_distance)
-    # closest_coordinate = next_frame_coordinate_list[minimum_distance_index][0]
     sorted_distance_coordinate = [[distances[i], next_frame_coordinate_list[i]] for i in range(len(distances))]
     sorted_distance_coordinate.sort(key=lambda x: x[0])
-
-    # print(prediction, minimum_distance, tuple(closest_distance), sep="\t")
-    # next_frame_coordinate_list = np.delete(next_frame_coordinate_list, minimum_distance_index, axis=0)
-    # next_frame_coordinate_list = []
-
-    # return closest_coordinate, minimum_distance
     return [i[0] for i in sorted_distance_coordinate], [i[1] for i in
                                                         sorted_distance_coordinate]  # distances, coordinates
 
 
-def create_new_cells(cell_list: list, coordinates: np.ndarray, video_type: str):
+def create_new_cells(cell_list: list, coordinates: np.ndarray, video_type: str, background):
     for yx in coordinates:
         if yx[1] <= CELL_INITIALIZATION_THRESHOLD:
-            cell = Cell(coordinates=yx, video_type=video_type)
+            cell = Cell(coordinates=yx, video_type=video_type, median_background=background)
             cell_list.append(cell)
 
 
 def update_cell_list(cell_list: list, org_coordinates: np.ndarray, frame_width: int, frame_number: int):
     for cell in cell_list:
         if cell.get_prediction()[1] < (frame_width - CELL_JOURNEY_COMPLETION_THRESHOLD):
-            # closest_coordinate, closest_distance = get_closest_coordinate(cell.get_prediction(), coordinates)
             distances, coordinates = get_closest_coordinate(cell.get_prediction(), org_coordinates)
             closest_distance, closest_coordinate = distances[0], coordinates[0]
 
@@ -81,11 +69,9 @@ def update_cell_list(cell_list: list, org_coordinates: np.ndarray, frame_width: 
             else:
 
                 cell.kill()
-            # for other_cell in cell_list:
-            #     cell.compare_coordinate(other_cell)
         else:
             cell.arrived(frame_num=frame_number)
-        # del distances, coordinates, org_coordinates, closest_coordinate, closest_distance, frame_number
+    # del distances, coordinates, org_coordinates, closest_coordinate, closest_distance, frame_number
 
 
 def create_tracking_gif(image_list, gaussian_image_list, path: str, video_type: str, save_frames=False):
@@ -127,7 +113,7 @@ def process_frame(video_path, frame_num_start, frame_num_end):
     video_type = video_path.split("/")[-1][:-4]
     median_background = torch.tensor(cv.imread(medians[video_type], 0)).unsqueeze(0) / 255
     cells = []
-    finished_cells = []
+    # finished_cells = []
     track_images[video_type] = [[], []]
     retval, frame = cap.read()
     model = NetExperiment()
@@ -135,7 +121,7 @@ def process_frame(video_path, frame_num_start, frame_num_end):
     model.eval()
     while frame_num < frame_num_start:
         frame_num += 1
-
+        retval, frame = cap.read()
     while retval and frame_num < frame_num_end:
         frame = torch.tensor(frame[:, :, 0]).unsqueeze(0) / 255
         model_input = torch.cat((frame, median_background), 0).unsqueeze(0)
@@ -146,10 +132,11 @@ def process_frame(video_path, frame_num_start, frame_num_end):
         gaussian_coordinates, gaussian_frame = get_coordinates(gaussian, text=str(frame_num))
         gaussian_frame = to_3d(gaussian_frame)
         width = gaussian.shape[1]
-        create_new_cells(cell_list=cells, coordinates=gaussian_coordinates, video_type=video_type)
+        create_new_cells(cell_list=cells, coordinates=gaussian_coordinates, video_type=video_type,
+                         background=median_background)
         update_cell_list(cell_list=cells, org_coordinates=gaussian_coordinates,
                          frame_width=width, frame_number=frame_num)
-        [cell.make_journey_collage(path_prefix=PREFIX) for cell in cells if cell.has_arrived()]
+        [cell.make_journey_collage(path_prefix=PREFIX, DAN=True) for cell in cells if cell.has_arrived()]
         cells = [cell for cell in cells if cell.is_alive()]
         # finished_cells += [cell for cell in cells if cell.has_arrived()]
         [cell.extract_segmentation(segmentation=segmentation, frame=frame) for cell in cells]
@@ -171,73 +158,4 @@ def process_frame(video_path, frame_num_start, frame_num_end):
     gc.collect()
 
 
-
-
-#path = PREFIX + "resources/nice_raw_data/"
-
 process_frame(sys.argv[1], int(sys.argv[2]), int(sys.argv[3]))
-
-# with imageio.get_writer('NF135_002_20201105.avi', mode='I') as writer:  # duration=0.2 (=standard)
-#     ret, frames = cv.imreadmulti("/mnt/cellstorage/resources/raw_data/NF135_002_20201105.tif", flags=cv.IMREAD_GRAYSCALE)
-#     for f in frames:
-#         writer.append_data(f)
-
-# image_type_dir = "K1_001_20201105"
-# fourcc = cv.VideoWriter_fourcc(*'XVID')
-# out = cv.VideoWriter(image_type_dir+".avi",fourcc,1,(640,480))
-# real_files = [cv.imread(PREFIX + "resources/{}/{}".format(image_type_dir, x), 0) for x in
-#                sorted(os.listdir(PREFIX + "resources/{}/".format(image_type_dir)), key=lambda x: int(x.split("_")[-1][:-4]))]
-#
-
-# cells = []
-# finished_cells = []
-#
-# medians = {"K1_001_20201105": PREFIX + "median_real_K1.png", "002_2.5kfps": PREFIX + "median_real_002.png",
-#            "NF135_002_20201105": PREFIX + "median_real_NF.png"}
-# model = NetExperiment()
-# model.load_state_dict(torch.load("/home/joshua/Desktop/model_b5000_r5000_6390.pt"))
-# model.eval()
-
-# for image_type_dir in os.listdir(PREFIX + "resources/")[:-1]:  # [:-1]: everything except raw_data folder
-#     real_files = [torch.tensor(cv.imread(PREFIX + "resources/{}/{}".format(image_type_dir, x), 0)).unsqueeze(0) / 255 for x in
-#                   sorted(os.listdir(PREFIX + "resources/{}/".format(image_type_dir)), key=lambda x: int(x.split("_")[-1][:-4]))]
-#     median = torch.tensor(cv.imread(medians[image_type_dir], 0)).unsqueeze(0) / 255
-#
-#     images_track_all_cells = []
-#     gaussian_track_all_cells = []
-#     cells = []
-#     temp_finished_cells = []
-#     trash_cells = []
-#     for idx, frame in enumerate(real_files):
-#         model_input = torch.cat((frame, median), 0).unsqueeze(0)
-#         segmentation, gaussian = model(model_input)
-#         frame = to_3d(frame.squeeze(0).detach().numpy()) * 255
-#         segmentation = segmentation.squeeze(0).squeeze(0).detach().numpy() * 255
-#         gaussian = gaussian.squeeze(0).squeeze(0).detach().numpy()
-#         gaussian_coordinates, gaussian_frame = get_coordinates(gaussian, text=str(idx))
-#         gaussian_frame = to_3d(gaussian_frame)
-#         width = gaussian.shape[1]
-#         create_new_cells(cell_list=cells, coordinates=gaussian_coordinates, video_type=image_type_dir)
-#         update_cell_list(cell_list=cells, org_coordinates=gaussian_coordinates,
-#                          frame_width=width, frame_number=idx)
-#         cells = [cell for cell in cells if cell.is_alive()]
-#         temp_finished_cells += [cell for cell in cells if cell.has_arrived()]
-#         [cell.extract_segmentation(segmentation=segmentation, frame=frame) for cell in cells]
-#         [cell.draw_personal_prediction(frame=frame) for cell in cells]
-#         [cell.draw_prediction(frame=frame) for cell in cells]
-#
-#         images_track_all_cells.append(frame)
-#         gaussian_track_all_cells.append(gaussian_frame)
-#         cells = [cell for cell in cells if not cell.has_arrived()]
-#         del model_input, frame, segmentation, gaussian, gaussian_frame, gaussian_coordinates, width
-#     files = glob.glob(PREFIX + image_type_dir + "/*")
-#     for f in files:
-#         os.remove(f)
-#     create_tracking_gif(images_track_all_cells, gaussian_track_all_cells, path=PREFIX + image_type_dir + "/",
-#                         video_type=image_type_dir, save_frames=True)
-#
-#     [cell.make_journey_collage(path_prefix=PREFIX) for cell in temp_finished_cells]
-#
-#     print('Analysis on video \"{}\" has been completed.'.format(
-#         image_type_dir))
-#     gc.collect()

@@ -1,18 +1,17 @@
-import glob
 import os.path
 import random
 import numpy as np
 import torch
 import cv2 as cv
-import shutil
 
 
 class Cell:
-    def __init__(self, coordinates: np.ndarray, video_type: str):
+    def __init__(self, coordinates: np.ndarray, video_type: str, median_background: torch.tensor):
         self.__coordinates = []
         self.__coordinates.append(self.__check_coordinates(coordinates, True))
         self.__id = random.random() * 10000
         self.__video_type = video_type
+        self.__background = median_background
         self.__speed = 45
         self.__direction = None
         self.__initial_coordinate_offset = 10
@@ -27,6 +26,9 @@ class Cell:
         self.__color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
         self.__segmentation_crop_collection = []
         self.__frame_crop_collection = []
+        self.__DAN_segmentation_crop_collection = []
+        self.__DAN_frame_crop_collection = []
+        self.__DAN_clean_background_crop_collection = []
         self.__completion_id = None
 
     def extract_segmentation(self, segmentation: np.ndarray, frame: np.ndarray):
@@ -43,12 +45,33 @@ class Cell:
             self.__segmentation_crop_collection.append(torch.tensor(segmentation_crop))
             self.__frame_crop_collection.append(torch.tensor(frame_crop))
 
-    def make_journey_collage(self, path_prefix=""):
+    def extract_segmentation_DAN(self, segmentation: np.ndarray, frame: np.ndarray):
+        frame = frame.copy()
+        segmentation = segmentation.copy()
+        offset = 50
+        desired_shape = (offset * 2, offset * 2)
+        current_coordinate = self.get_current_coordinate()
+        y = current_coordinate[0]
+        x = current_coordinate[1]
+        segmentation_crop = segmentation[0, y - offset:y + offset, x - offset:x + offset]
+        frame_crop = frame[y - offset:y + offset, x - offset:x + offset][:, :, 0]
+        clean_background_crop = self.__background[y - offset:y + offset, x - offset:x + offset]
+        if segmentation_crop.shape == desired_shape and frame_crop.shape == desired_shape and clean_background_crop.shape == desired_shape:
+            self.__DAN_segmentation_crop_collection.append(torch.tensor(segmentation_crop))
+            self.__DAN_frame_crop_collection.append(torch.tensor(frame_crop))
+            self.__DAN_clean_background_crop_collection.append(torch.tensor(clean_background_crop))
+
+    def make_journey_collage(self, path_prefix="", DAN=False):
         path = "{}{}/".format(path_prefix, self.get_video_type())
 
         if not os.path.isdir(path):
             os.mkdir(path)
-
+        if DAN:
+            combined_image = torch.cat((torch.cat([item for item in self.__DAN_frame_crop_collection], 1),
+                                        torch.cat([item for item in self.__DAN_clean_background_crop_collection], 1),
+                                        torch.cat([item for item in self.__DAN_segmentation_crop_collection], 1)), 0)
+            cv.imwrite("{}cell_journey_DAN_{}.png".format(path, self.get_completion_id()), combined_image.detach().numpy())
+            del self.__DAN_clean_background_crop_collection, self.__DAN_segmentation_crop_collection, self.__DAN_frame_crop_collection
         frame_crops = torch.cat([item for item in self.__frame_crop_collection], 1)
         segmentation_crops = torch.cat([item for item in self.__segmentation_crop_collection], 1)
         combined_image = torch.cat((frame_crops, segmentation_crops), 0)
@@ -88,23 +111,6 @@ class Cell:
 
     def get_current_coordinate(self):
         return self.get_coordinate_list()[-1]
-
-    def compare_coordinate(self, cell2):
-        assert isinstance(cell2, Cell)
-        distance = np.linalg.norm(self.get_current_coordinate() - cell2.get_current_coordinate(), axis=0)
-
-        if self.get_id() != cell2.get_id():
-            if int(distance) < 1:
-                self.kill()
-                cell2.kill()
-
-    def draw_path(self):
-        img = np.zeros((480, 640))
-        for i in range(len(self.get_coordinate_list()) - 1):
-            img = cv.line(img, pt1=tuple(self.get_coordinate_list()[i][::-1]),
-                          pt2=tuple(self.get_coordinate_list()[i + 1][::-1]), color=255)
-
-        cv.imwrite("track_{}.png".format(self.get_id()), (1 - img) * 255)
 
     def __check_coordinates(self, coordinates, initial=False):
         coordinates = np.array(coordinates)
