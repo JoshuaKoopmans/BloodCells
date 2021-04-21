@@ -55,7 +55,7 @@ class Cell:
         x = current_coordinate[1]
         segmentation_crop = segmentation[0, y - offset:y + offset, x - offset:x + offset]
         frame_crop = frame[y - offset:y + offset, x - offset:x + offset][:, :, 0]
-        clean_background_crop = self.__background[y - offset:y + offset, x - offset:x + offset]
+        clean_background_crop = self.__background.detach().numpy()[0, y - offset:y + offset, x - offset:x + offset]
         if segmentation_crop.shape == desired_shape and frame_crop.shape == desired_shape and clean_background_crop.shape == desired_shape:
             self.__DAN_segmentation_crop_collection.append(torch.tensor(segmentation_crop))
             self.__DAN_frame_crop_collection.append(torch.tensor(frame_crop))
@@ -68,7 +68,7 @@ class Cell:
             os.mkdir(path)
         if DAN:
             DAN_frames = torch.cat([item for item in self.__DAN_frame_crop_collection], 1)
-            DAN_background = torch.cat([item for item in self.__DAN_clean_background_crop_collection], 1)
+            DAN_background = torch.cat([item*255 for item in self.__DAN_clean_background_crop_collection], 1)
             DAN_segmentation = torch.cat([item for item in self.__DAN_segmentation_crop_collection], 1)
             combined_image = torch.cat((DAN_frames, DAN_background, DAN_segmentation), 0)
             cv.imwrite("{}cell_journey_DAN_{}.png".format(path, self.get_completion_id()),

@@ -103,6 +103,10 @@ def check_if_dir_exists(path: str):
 def get_single_frame(cap: cv.VideoCapture) -> (bool, np.ndarray):
     return cap.read()
 
+def get_file_extension(path: str) -> tuple:
+    filename, ext = os.path.splitext(path)
+    filename = filename.split("/")[-1:][0]
+    return filename, ext
 
 track_images = dict()
 
@@ -110,7 +114,8 @@ track_images = dict()
 def process_frame(video_path, frame_num_start, frame_num_end):
     frame_num = 0
     cap = cv.VideoCapture(video_path)
-    video_type = video_path.split("/")[-1][:-4]
+    name, ext = get_file_extension(video_path)
+    video_type = name
     median_background = torch.tensor(cv.imread(medians[video_type], 0)).unsqueeze(0) / 255
     cells = []
     # finished_cells = []
