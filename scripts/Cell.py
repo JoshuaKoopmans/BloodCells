@@ -67,17 +67,20 @@ class Cell:
         if not os.path.isdir(path):
             os.mkdir(path)
         if DAN:
-            combined_image = torch.cat((torch.cat([item for item in self.__DAN_frame_crop_collection], 1),
-                                        torch.cat([item for item in self.__DAN_clean_background_crop_collection], 1),
-                                        torch.cat([item for item in self.__DAN_segmentation_crop_collection], 1)), 0)
-            cv.imwrite("{}cell_journey_DAN_{}.png".format(path, self.get_completion_id()), combined_image.detach().numpy())
-            del self.__DAN_clean_background_crop_collection, self.__DAN_segmentation_crop_collection, self.__DAN_frame_crop_collection
+            DAN_frames = torch.cat([item for item in self.__DAN_frame_crop_collection], 1)
+            DAN_background = torch.cat([item for item in self.__DAN_clean_background_crop_collection], 1)
+            DAN_segmentation = torch.cat([item for item in self.__DAN_segmentation_crop_collection], 1)
+            combined_image = torch.cat((DAN_frames, DAN_background, DAN_segmentation), 0)
+            cv.imwrite("{}cell_journey_DAN_{}.png".format(path, self.get_completion_id()),
+                       combined_image.detach().numpy())
+
         frame_crops = torch.cat([item for item in self.__frame_crop_collection], 1)
         segmentation_crops = torch.cat([item for item in self.__segmentation_crop_collection], 1)
         combined_image = torch.cat((frame_crops, segmentation_crops), 0)
         cv.imwrite("{}cell_journey_{}.png".format(path, self.get_completion_id()), combined_image.detach().numpy())
         del self.__segmentation_crop_collection
         del self.__frame_crop_collection
+        del self.__DAN_clean_background_crop_collection, self.__DAN_segmentation_crop_collection, self.__DAN_frame_crop_collection
         self.kill()
 
     def __predict_next_coordinates(self):

@@ -140,6 +140,7 @@ def process_frame(video_path, frame_num_start, frame_num_end):
         cells = [cell for cell in cells if cell.is_alive()]
         # finished_cells += [cell for cell in cells if cell.has_arrived()]
         [cell.extract_segmentation(segmentation=segmentation, frame=frame) for cell in cells]
+        [cell.extract_segmentation_DAN(segmentation=segmentation, frame=frame) for cell in cells]
         [cell.draw_personal_prediction(frame=frame) for cell in cells]
         [cell.draw_prediction(frame=frame) for cell in cells]
 
