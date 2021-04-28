@@ -6,7 +6,7 @@ import cv2 as cv
 
 
 class Cell:
-    def __init__(self, coordinates: np.ndarray, video_type: str, median_background: torch.tensor):
+    def __init__(self, coordinates: np.ndarray, video_type: str, median_background: torch.tensor, initial_frame_num: int):
         self.__coordinates = []
         self.__coordinates.append(self.__check_coordinates(coordinates, True))
         self.__id = random.random() * 10000
@@ -23,6 +23,7 @@ class Cell:
         self.__prediction_images = []
         self.__alive = True
         self.__arrived = False
+        random.seed(coordinates.sum()+initial_frame_num)
         self.__color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
         self.__segmentation_crop_collection = []
         self.__frame_crop_collection = []
@@ -34,7 +35,7 @@ class Cell:
     def extract_segmentation(self, segmentation: np.ndarray, frame: np.ndarray):
         frame = frame.copy()
         segmentation = segmentation.copy()
-        offset = 25
+        offset = 30
         desired_shape = (offset * 2, offset * 2)
         current_coordinate = self.get_current_coordinate()
         y = current_coordinate[0]

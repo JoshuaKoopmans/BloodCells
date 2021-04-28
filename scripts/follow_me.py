@@ -44,10 +44,10 @@ def get_closest_coordinate(prediction: tuple, next_frame_coordinate_list: np.nda
                                                         sorted_distance_coordinate]  # distances, coordinates
 
 
-def create_new_cells(cell_list: list, coordinates: np.ndarray, video_type: str, background):
+def create_new_cells(cell_list: list, coordinates: np.ndarray, video_type: str, background, frame_num):
     for yx in coordinates:
         if yx[1] <= CELL_INITIALIZATION_THRESHOLD:
-            cell = Cell(coordinates=yx, video_type=video_type, median_background=background)
+            cell = Cell(coordinates=yx, video_type=video_type, median_background=background, initial_frame_num=frame_num)
             cell_list.append(cell)
 
 
@@ -57,8 +57,8 @@ def update_cell_list(cell_list: list, org_coordinates: np.ndarray, frame_width: 
             distances, coordinates = get_closest_coordinate(cell.get_prediction(), org_coordinates)
             try:
                 closest_distance, closest_coordinate = distances[0], coordinates[0]
-            except Exception:
-                print(video_path, str(frame_number))
+            except IndexError:
+                cell.kill()
                 continue
             if closest_distance <= max(30, int(cell.get_current_speed() * 2)):
                 distances, coordinates = get_closest_coordinate(closest_coordinate, org_coordinates)
@@ -139,7 +139,7 @@ def process_frame(video_path, median_path, frame_num_start, frame_num_end):
         gaussian_frame = to_3d(gaussian_frame)
         width = gaussian.shape[1]
         create_new_cells(cell_list=cells, coordinates=gaussian_coordinates, video_type=video_type,
-                         background=median_background)
+                         background=median_background, frame_num=frame_num)
         update_cell_list(cell_list=cells, org_coordinates=gaussian_coordinates,
                          frame_width=width, frame_number=frame_num)
         [cell.make_journey_collage(path_prefix=PREFIX, DAN=True) for cell in cells if cell.has_arrived()]
