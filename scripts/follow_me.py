@@ -1,7 +1,6 @@
 import gc
 import os
 import sys
-
 import imageio
 import torch
 import numpy as np
@@ -103,22 +102,23 @@ def check_if_dir_exists(path: str):
 def get_single_frame(cap: cv.VideoCapture) -> (bool, np.ndarray):
     return cap.read()
 
+
 def get_file_extension(path: str) -> tuple:
     filename, ext = os.path.splitext(path)
     filename = filename.split("/")[-1:][0]
     return filename, ext
 
+
 track_images = dict()
 
 
-def process_frame(video_path, frame_num_start, frame_num_end):
+def process_frame(video_path, median_path, frame_num_start, frame_num_end):
     frame_num = 0
     cap = cv.VideoCapture(video_path)
     name, ext = get_file_extension(video_path)
     video_type = name
-    median_background = torch.tensor(cv.imread(medians[video_type], 0)).unsqueeze(0) / 255
+    median_background = torch.tensor(cv.imread(median_path, 0)).unsqueeze(0) / 255
     cells = []
-    # finished_cells = []
     track_images[video_type] = [[], []]
     retval, frame = cap.read()
     model = NetExperiment()
@@ -148,12 +148,6 @@ def process_frame(video_path, frame_num_start, frame_num_end):
         [cell.extract_segmentation_DAN(segmentation=segmentation, frame=frame) for cell in cells]
         [cell.draw_personal_prediction(frame=frame) for cell in cells]
         [cell.draw_prediction(frame=frame) for cell in cells]
-
-        # track_images[video_type][0].append(frame)
-        # track_images[video_type][1].append(gaussian_frame)
-
-        # cells = [cell for cell in cells if not cell.has_arrived()]
-
         write_current_images(track_frame=frame, gaussian_frame=gaussian_frame, frame_num=frame_num,
                              path=PREFIX + video_type + "/",
                              video_type=video_type, save_frames=True)
@@ -164,4 +158,10 @@ def process_frame(video_path, frame_num_start, frame_num_end):
     gc.collect()
 
 
-process_frame(sys.argv[1], int(sys.argv[2]), int(sys.argv[3]))
+if __name__ == '__main__':
+    video_path = sys.argv[1]
+    median_path = sys.argv[2]
+    start_index = int(sys.argv[3])
+    end_index = int(sys.argv[4])
+
+    process_frame(video_path, median_path, start_index, end_index)
