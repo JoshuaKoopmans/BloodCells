@@ -15,8 +15,6 @@ from methods import blur
 CELL_INITIALIZATION_THRESHOLD = 70
 CELL_JOURNEY_COMPLETION_THRESHOLD = 40
 
-medians = {"K1_001_20201105": PREFIX + "median_real_K1.png", "002_2.5kfps": PREFIX + "median_real_002.png",
-           "NF135_002_20201105": PREFIX + "median_real_NF.png"}
 model_file = PREFIX + "model_b5000_r5000_6390.pt"
 
 
@@ -57,8 +55,11 @@ def update_cell_list(cell_list: list, org_coordinates: np.ndarray, frame_width: 
     for cell in cell_list:
         if cell.get_prediction()[1] < (frame_width - CELL_JOURNEY_COMPLETION_THRESHOLD):
             distances, coordinates = get_closest_coordinate(cell.get_prediction(), org_coordinates)
-            closest_distance, closest_coordinate = distances[0], coordinates[0]
-
+            try:
+                closest_distance, closest_coordinate = distances[0], coordinates[0]
+            except Exception:
+                print(video_path, str(frame_number))
+                continue
             if closest_distance <= max(30, int(cell.get_current_speed() * 2)):
                 distances, coordinates = get_closest_coordinate(closest_coordinate, org_coordinates)
                 if len(distances) > 1 and distances[1] < 35:
