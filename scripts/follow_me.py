@@ -142,11 +142,11 @@ def process_frame(video_path, median_path, frame_num_start, frame_num_end):
                          background=median_background, frame_num=frame_num)
         update_cell_list(cell_list=cells, org_coordinates=gaussian_coordinates,
                          frame_width=width, frame_number=frame_num)
-        [cell.make_journey_collage(path_prefix=PREFIX, DAN=True) for cell in cells if cell.has_arrived()]
+        [cell.make_journey_collage(path_prefix=PREFIX, DAN=False) for cell in cells if cell.has_arrived()]
         cells = [cell for cell in cells if cell.is_alive()]
         # finished_cells += [cell for cell in cells if cell.has_arrived()]
         [cell.extract_segmentation(segmentation=segmentation, frame=frame) for cell in cells]
-        [cell.extract_segmentation_DAN(segmentation=segmentation, frame=frame) for cell in cells]
+        #[cell.extract_segmentation_DAN(segmentation=segmentation, frame=frame) for cell in cells]
         [cell.draw_personal_prediction(frame=frame) for cell in cells]
         [cell.draw_prediction(frame=frame) for cell in cells]
         write_current_images(track_frame=frame, gaussian_frame=gaussian_frame, frame_num=frame_num,
