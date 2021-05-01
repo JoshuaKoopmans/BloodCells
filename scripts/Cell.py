@@ -79,7 +79,7 @@ class Cell:
 
         frame_crops = torch.cat([item for item in self.__frame_crop_collection], 1)
         segmentation_crops = torch.cat([item for item in self.__segmentation_crop_collection], 1)
-        background_crop = torch.cat([item for item in self.__clean_background_crop_collection], 1)
+        background_crop = torch.cat([item*255 for item in self.__clean_background_crop_collection], 1)
         combined_image = torch.cat((frame_crops, background_crop, segmentation_crops), 0)
         cv.imwrite("{}cell_journey_{}.png".format(path, self.get_completion_id()), combined_image.detach().numpy())
         del self.__segmentation_crop_collection, self.__frame_crop_collection, self.__clean_background_crop_collection
