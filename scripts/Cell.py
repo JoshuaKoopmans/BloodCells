@@ -27,6 +27,7 @@ class Cell:
         self.__color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
         self.__segmentation_crop_collection = []
         self.__frame_crop_collection = []
+        self.__clean_background_crop_collection = []
         self.__DAN_segmentation_crop_collection = []
         self.__DAN_frame_crop_collection = []
         self.__DAN_clean_background_crop_collection = []
@@ -42,10 +43,11 @@ class Cell:
         x = current_coordinate[1]
         segmentation_crop = segmentation[0, y - offset:y + offset, x - offset:x + offset]
         frame_crop = frame[y - offset:y + offset, x - offset:x + offset][:, :, 0]
-        if segmentation_crop.shape == desired_shape and frame_crop.shape == desired_shape:
+        clean_background_crop = self.__background.detach().numpy()[0, y - offset:y + offset, x - offset:x + offset]
+        if segmentation_crop.shape == desired_shape and frame_crop.shape == desired_shape and clean_background_crop.shape == desired_shape:
             self.__segmentation_crop_collection.append(torch.tensor(segmentation_crop))
             self.__frame_crop_collection.append(torch.tensor(frame_crop))
-
+            self.__clean_background_crop_collection.append(torch.tensor(clean_background_crop))
     def extract_segmentation_DAN(self, segmentation: np.ndarray, frame: np.ndarray):
         frame = frame.copy()
         segmentation = segmentation.copy()
