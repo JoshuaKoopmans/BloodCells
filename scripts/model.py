@@ -39,7 +39,7 @@ os.mkdir(model_dir)
 os.mkdir(model_dir + "models/")
 
 models = {"normal": Net(), "experimental": NetExperiment(), "tracking": NetTracking()}
-new_data_file_postfix = "_new" if args.new_data and args.checkpoint_file != "" else ""
+new_data_file_postfix = "_new" if args.new_data else ""
 x_bullet, x_round = torch.load(
     prefix + "bullet_cells{}_data.pt".format(new_data_file_postfix)).float() / 255., torch.load(
     prefix + "round_cells{}_data.pt".format(new_data_file_postfix)).float() / 255.
