@@ -1,4 +1,6 @@
 import cv2
+import torch.optim
+
 from Models import *
 from skimage.feature import peak_local_max
 from datetime import datetime
@@ -15,6 +17,8 @@ parser.add_argument("--type", help="Choose which model type to run.", choices=["
 parser.add_argument("--stop_epoch", help="Indicate at which epoch the training should be stopped.", type=int,
                     default=-1)
 parser.add_argument("--name", help="Indicate folder name where model results are saved.", default="")
+parser.add_argument("--checkpoint_file", help="Indicate path of existing model.", default="")
+parser.add_argument("--new_data", help="Indicate usage of new data.", type=bool, default=False)
 args = parser.parse_args()
 
 torch.manual_seed(0)
@@ -27,7 +31,7 @@ if os.environ.get("PREFIX") is None:
 else:
     prefix = os.environ.get("PREFIX")
 
-model_id = datetime.now().strftime("%d%m%Y-%H%M%S%p") + str(args.name)
+model_id = str(datetime.now().strftime("%d%m%Y-%H%M%S%p")) + "_" + str(args.name)
 model_dir = "{}model_runs/{}/".format(prefix, model_id)
 if not os.path.isdir("{}model_runs/".format(prefix)):
     os.mkdir("{}model_runs/".format(prefix))
@@ -35,13 +39,16 @@ os.mkdir(model_dir)
 os.mkdir(model_dir + "models/")
 
 models = {"normal": Net(), "experimental": NetExperiment(), "tracking": NetTracking()}
-
-x_bullet, x_round = torch.load(prefix + "bullet_cells_data.pt").float() / 255., torch.load(
-    prefix + "round_cells_data.pt").float() / 255.
-y_bullet_gauss, y_round_guass = torch.load(prefix + "bullet_cells_labels_gauss.pt").float() / 255., torch.load(
-    prefix + "round_cells_labels_gauss.pt").float() / 255.
-y_bullet, y_round = torch.load(prefix + "bullet_cells_labels.pt").float() / 255., torch.load(
-    prefix + "round_cells_labels.pt").float() / 255.
+new_data_file_postfix = "_new" if args.new_data and args.checkpoint_file != "" else ""
+x_bullet, x_round = torch.load(
+    prefix + "bullet_cells{}_data.pt".format(new_data_file_postfix)).float() / 255., torch.load(
+    prefix + "round_cells{}_data.pt".format(new_data_file_postfix)).float() / 255.
+y_bullet_gauss, y_round_guass = torch.load(
+    prefix + "bullet_cells{}_labels_gauss.pt".format(new_data_file_postfix)).float() / 255., torch.load(
+    prefix + "round_cells{}_labels_gauss.pt".format(new_data_file_postfix)).float() / 255.
+y_bullet, y_round = torch.load(
+    prefix + "bullet_cells{}_labels.pt".format(new_data_file_postfix)).float() / 255., torch.load(
+    prefix + "round_cells{}_labels.pt".format(new_data_file_postfix)).float() / 255.
 
 bullet_percentage, round_percentage = int(len(y_bullet) * float(args.bullet_perc)), int(
     len(y_round) * float(args.round_perc))
@@ -86,15 +93,19 @@ def train(X, y, mini_batch_size: int):
             if epoch % 10 == 0:
                 model.eval()
                 evaluate(model, epoch)
-                torch.save(model.state_dict(),
-                           model_dir + "models/" + "model_b{}_r{}_{}.pt".format(str(bullet_percentage),
+                state = {'epoch': epoch + 1, 'state_dict': model.state_dict(),
+                         'optimizer': optimizer.state_dict()}
+                torch.save(state,
+                           model_dir + "models/" + "state_b{}_r{}_{}.pt".format(str(bullet_percentage),
                                                                                 str(round_percentage),
                                                                                 str(epoch)))
                 model.train()
             if stop_epoch > 0:
                 if epoch == stop_epoch:
                     model.eval()
-                    torch.save(model.state_dict(),
+                    state = {'epoch': epoch + 1, 'state_dict': model.state_dict(),
+                             'optimizer': optimizer.state_dict()}
+                    torch.save(state,
                                model_dir + "models/" + "{}_model_epoch_{}.pt".format(model_type, str(stop_epoch)))
                     sys.exit(0)
             if epoch == EXHAUST_EPOCH:
@@ -102,15 +113,98 @@ def train(X, y, mini_batch_size: int):
             epoch += 1
 
 
-test = {"002": [torch.tensor(cv2.imread(prefix + "resources/002_2.5kfps/002_2.5kfps_98.png", 0)) / 255,
-                torch.tensor(cv2.imread(prefix + "median_real_002.png", 0)) / 255],
-        "K1": [torch.tensor(cv2.imread(prefix + "resources/K1_001_20201105/K1_001_20201105_168.png",
-                                       0)) / 255,
-               torch.tensor(cv2.imread(prefix + "median_real_K1.png", 0)) / 255],
-        "NF": [
-            torch.tensor(cv2.imread(prefix + "resources/NF135_002_20201105/NF135_002_20201105_157.png",
-                                    0)) / 255,
-            torch.tensor(cv2.imread(prefix + "median_real_NF.png", 0)) / 255]}
+def continue_train(X, y, mini_batch_size: int, checkpoint: str):
+    model = models[model_type]
+    optimizer = torch.optim.Adam(model.parameters())
+    model, optimizer, epoch = load_checkpoint(model=model, optimizer=optimizer, filename=checkpoint)
+    model.train()
+    with open(model_dir + "model_info.txt", "w") as f:
+        print(model, file=f, end="\n")
+        print("\nCONTINUING TRAINING\nTraining data amounts:\nBullet: {} - Round: {}".format(str(bullet_percentage),
+                                                                                             str(round_percentage)),
+              file=f)
+        f.close()
+    done = False
+
+    while not done:
+        gc.collect()
+        positions = torch.randperm(len(X))
+        for mb in range(0, len(X), mini_batch_size):
+            x_minib = X[positions[mb:mb + mini_batch_size]]
+            y_minib = y[positions[mb:mb + mini_batch_size]]
+            y_gauss_minib = y_gauss[positions[mb:mb + mini_batch_size]]
+            y_pred, y_pred_gauss = model(x_minib)
+            loss_train = F.binary_cross_entropy(y_pred, y_minib.float())
+            loss_train_gauss = F.binary_cross_entropy(y_pred_gauss, y_gauss_minib.float())
+            total_loss = loss_train + loss_train_gauss
+
+            print("Epoch: {}\nLoss: {}".format(epoch, loss_train.item()), end="\n")
+
+            total_loss.backward()
+
+            torch.nn.utils.clip_grad_value_(model.parameters(), 1)
+            optimizer.step()
+            optimizer.zero_grad()
+            if epoch % 10 == 0:
+                model.eval()
+                evaluate(model, epoch)
+                state = {'epoch': epoch + 1, 'state_dict': model.state_dict(),
+                         'optimizer': optimizer.state_dict()}
+                torch.save(state,
+                           model_dir + "models/" + "model_b{}_r{}_{}.pt".format(str(bullet_percentage),
+                                                                                str(round_percentage),
+                                                                                str(epoch)))
+                model.train()
+            if stop_epoch > 0:
+                if epoch == stop_epoch:
+                    model.eval()
+                    state = {'epoch': epoch + 1, 'state_dict': model.state_dict(),
+                             'optimizer': optimizer.state_dict()}
+                    torch.save(state,
+                               model_dir + "models/" + "{}_model_epoch_{}.pt".format(model_type, str(stop_epoch)))
+                    sys.exit(0)
+            if epoch == EXHAUST_EPOCH:
+                sys.exit(0)
+            epoch += 1
+
+
+def load_checkpoint(model, optimizer, filename):
+    # Note: Input model & optimizer should be pre-defined.  This routine only updates their states.
+    start_epoch = 0
+    if os.path.isfile(filename):
+        print("=> loading checkpoint '{}'".format(filename))
+        checkpoint = torch.load(filename)
+        start_epoch = checkpoint['epoch']
+        model.load_state_dict(checkpoint['state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        print("=> loaded checkpoint '{}' (epoch {})"
+              .format(filename, checkpoint['epoch']))
+    else:
+        print("=> no checkpoint found at '{}'".format(filename))
+
+    return model, optimizer, start_epoch
+
+
+if not args.checkpoint_file:
+    test = {"002": [torch.tensor(cv2.imread(prefix + "resources/002_2.5kfps/002_2.5kfps_98.png", 0)) / 255,
+                    torch.tensor(cv2.imread(prefix + "median_real_002.png", 0)) / 255],
+            "K1": [torch.tensor(cv2.imread(prefix + "resources/K1_001_20201105/K1_001_20201105_168.png",
+                                           0)) / 255,
+                   torch.tensor(cv2.imread(prefix + "median_real_K1.png", 0)) / 255],
+            "NF": [
+                torch.tensor(cv2.imread(prefix + "resources/NF135_002_20201105/NF135_002_20201105_157.png",
+                                        0)) / 255,
+                torch.tensor(cv2.imread(prefix + "median_real_NF.png", 0)) / 255]}
+else:
+    test = {"002": [torch.tensor(cv2.imread(prefix + "resources/002_2.5kfps/002_2.5kfps_222.png", 0)) / 255,
+                    torch.tensor(cv2.imread(prefix + "median_real_002.png", 0)) / 255],
+            "K1": [torch.tensor(cv2.imread(prefix + "resources/K1_001_20201105/K1_001_20201105_2.png",
+                                           0)) / 255,
+                   torch.tensor(cv2.imread(prefix + "median_real_K1.png", 0)) / 255],
+            "NF": [
+                torch.tensor(cv2.imread(prefix + "resources/NF135_002_20201105/NF135_002_20201105_280.png",
+                                        0)) / 255,
+                torch.tensor(cv2.imread(prefix + "median_real_NF.png", 0)) / 255]}
 
 
 def evaluate(model, num):
@@ -142,4 +236,7 @@ def get_coordinates(img, img2):
     return torch.tensor(img2)
 
 
-train(X, y, 64)
+if args.checkpoint_file:
+    continue_train(X, y, 64, checkpoint=args.checkpoint_file)
+else:
+    train(X, y, 64)

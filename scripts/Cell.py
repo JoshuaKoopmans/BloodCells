@@ -6,7 +6,8 @@ import cv2 as cv
 
 
 class Cell:
-    def __init__(self, coordinates: np.ndarray, video_type: str, median_background: torch.tensor, initial_frame_num: int):
+    def __init__(self, coordinates: np.ndarray, video_type: str, median_background: torch.tensor,
+                 initial_frame_num: int):
         self.__coordinates = []
         self.__coordinates.append(self.__check_coordinates(coordinates, True))
         self.__id = random.random() * 10000
@@ -23,7 +24,7 @@ class Cell:
         self.__prediction_images = []
         self.__alive = True
         self.__arrived = False
-        random.seed(coordinates.sum()+initial_frame_num)
+        random.seed(coordinates.sum() + initial_frame_num)
         self.__color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
         self.__segmentation_crop_collection = []
         self.__frame_crop_collection = []
@@ -32,11 +33,12 @@ class Cell:
         self.__DAN_frame_crop_collection = []
         self.__DAN_clean_background_crop_collection = []
         self.__completion_id = None
+        self.__average_constriction_speed = ""
 
     def extract_segmentation(self, segmentation: np.ndarray, frame: np.ndarray):
         frame = frame.copy()
         segmentation = segmentation.copy()
-        offset = 30
+        offset = 32
         desired_shape = (offset * 2, offset * 2)
         current_coordinate = self.get_current_coordinate()
         y = current_coordinate[0]
@@ -48,6 +50,7 @@ class Cell:
             self.__segmentation_crop_collection.append(torch.tensor(segmentation_crop))
             self.__frame_crop_collection.append(torch.tensor(frame_crop))
             self.__clean_background_crop_collection.append(torch.tensor(clean_background_crop))
+
     def extract_segmentation_DAN(self, segmentation: np.ndarray, frame: np.ndarray):
         frame = frame.copy()
         segmentation = segmentation.copy()
@@ -71,17 +74,28 @@ class Cell:
             os.mkdir(path)
         if DAN:
             DAN_frames = torch.cat([item for item in self.__DAN_frame_crop_collection], 1)
-            DAN_background = torch.cat([item*255 for item in self.__DAN_clean_background_crop_collection], 1)
+            DAN_background = torch.cat([item * 255 for item in self.__DAN_clean_background_crop_collection], 1)
             DAN_segmentation = torch.cat([item for item in self.__DAN_segmentation_crop_collection], 1)
             combined_image = torch.cat((DAN_frames, DAN_background, DAN_segmentation), 0)
             cv.imwrite("{}cell_journey_DAN_{}.png".format(path, self.get_completion_id()),
                        combined_image.detach().numpy())
-
+        # for item in self.__segmentation_crop_collection:
+        #     di = self.__calculate_deformity_index((item.detach().numpy() * 255).astype("uint8"), 160)
+        #     item = cv.putText(item.detach().numpy(), "DI = {:.2f}".format(di), (0, 59), cv.FONT_HERSHEY_SIMPLEX, 0.2, 0)
+        # # di = [cv.putText(img, "DI = {:.2f}".format(self.__calculate_deformity_index((img.detach().numpy()*255).astype("uint8"), 160)), (40, 40), cv.FONT_HERSHEY_SIMPLEX, 1, 0) for img in self.__segmentation_crop_collection]
+        # # print(di)
         frame_crops = torch.cat([item for item in self.__frame_crop_collection], 1)
         segmentation_crops = torch.cat([item for item in self.__segmentation_crop_collection], 1)
-        background_crop = torch.cat([item*255 for item in self.__clean_background_crop_collection], 1)
+        background_crop = torch.cat([item * 255 for item in self.__clean_background_crop_collection], 1)
         combined_image = torch.cat((frame_crops, background_crop, segmentation_crops), 0)
-        cv.imwrite("{}cell_journey_{}.png".format(path, self.get_completion_id()), combined_image.detach().numpy())
+        # constriction_coordinates = [x for x in self.get_coordinate_list() if x[1] <= 290]
+        # if len(constriction_coordinates) >= 2:
+        #     self.__average_constriction_speed = (constriction_coordinates[-1][1] - constriction_coordinates[0][
+        #         1]) / len(
+        #         constriction_coordinates)
+        # speed_str = "{:.2f}".format(self.__average_constriction_speed).rjust(10, "0")
+        cv.imwrite("{}cell_journey_{}.png".format(path, self.get_completion_id()),
+                   combined_image.detach().numpy())
         del self.__segmentation_crop_collection, self.__frame_crop_collection, self.__clean_background_crop_collection
         del self.__DAN_clean_background_crop_collection, self.__DAN_segmentation_crop_collection, self.__DAN_frame_crop_collection
         self.kill()
@@ -173,6 +187,22 @@ class Cell:
         prediction = [str(yx) for yx in self.get_prediction()]
         self.__completion_id = "{}_{}_{}".format(self.get_video_type(), str(frame_num),
                                                  ";".join(prediction))
+
+    def __calculate_deformity_index(self, img, threshold):
+        ret, thresh = cv.threshold(img, threshold, 255, 0)
+        contours, hierarchy = cv.findContours(thresh, 1, 2)
+        cnt = contours[0]
+        boxes = []
+        for c in cnt:
+            (x, y, w, h) = cv.boundingRect(c)
+            boxes.append([x, y, x + w, y + h])
+
+        boxes = np.asarray(boxes)
+        left, top = np.min(boxes, axis=0)[:2]
+        right, bottom = np.max(boxes, axis=0)[2:]
+        x = right - left
+        y = bottom - top
+        return (x - y) / (x + y)
 
     def has_arrived(self):
         return self.__arrived
