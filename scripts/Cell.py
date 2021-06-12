@@ -4,6 +4,10 @@ import numpy as np
 import torch
 import cv2 as cv
 
+"""
+Cell class used to track individual cells throughout videos
+"""
+
 
 class Cell:
     def __init__(self, coordinates: np.ndarray, video_type: str, median_background: torch.tensor,
@@ -36,6 +40,11 @@ class Cell:
         self.__average_constriction_speed = ""
 
     def extract_segmentation(self, segmentation: np.ndarray, frame: np.ndarray):
+        """
+        For each cell movement, extract from the segmentation frame, real frame, and median frame, a cropped image around the cell in question
+        :param segmentation: Segmentation frame from neural network
+        :param frame: Real frame
+        """
         frame = frame.copy()
         segmentation = segmentation.copy()
         offset = 32
@@ -51,49 +60,23 @@ class Cell:
             self.__frame_crop_collection.append(torch.tensor(frame_crop))
             self.__clean_background_crop_collection.append(torch.tensor(clean_background_crop))
 
-    def extract_segmentation_DAN(self, segmentation: np.ndarray, frame: np.ndarray):
-        frame = frame.copy()
-        segmentation = segmentation.copy()
-        offset = 50
-        desired_shape = (offset * 2, offset * 2)
-        current_coordinate = self.get_current_coordinate()
-        y = current_coordinate[0]
-        x = current_coordinate[1]
-        segmentation_crop = segmentation[0, y - offset:y + offset, x - offset:x + offset]
-        frame_crop = frame[y - offset:y + offset, x - offset:x + offset][:, :, 0]
-        clean_background_crop = self.__background.detach().numpy()[0, y - offset:y + offset, x - offset:x + offset]
-        if segmentation_crop.shape == desired_shape and frame_crop.shape == desired_shape and clean_background_crop.shape == desired_shape:
-            self.__DAN_segmentation_crop_collection.append(torch.tensor(segmentation_crop))
-            self.__DAN_frame_crop_collection.append(torch.tensor(frame_crop))
-            self.__DAN_clean_background_crop_collection.append(torch.tensor(clean_background_crop))
-
-    def make_journey_collage(self, path_prefix="", DAN=False):
+    def make_journey_collage(self, path_prefix=""):
+        """
+        Concat all frame crops and segmentation crops and save image
+        :param path_prefix: Path prefix for filename
+        """
         path = "{}{}/".format(path_prefix, self.get_video_type())
 
         if not os.path.isdir(path):
             os.mkdir(path)
-        if DAN:
-            DAN_frames = torch.cat([item for item in self.__DAN_frame_crop_collection], 1)
-            DAN_background = torch.cat([item * 255 for item in self.__DAN_clean_background_crop_collection], 1)
-            DAN_segmentation = torch.cat([item for item in self.__DAN_segmentation_crop_collection], 1)
-            combined_image = torch.cat((DAN_frames, DAN_background, DAN_segmentation), 0)
-            cv.imwrite("{}cell_journey_DAN_{}.png".format(path, self.get_completion_id()),
-                       combined_image.detach().numpy())
+
         # for item in self.__segmentation_crop_collection:
-        #     di = self.__calculate_deformity_index((item.detach().numpy() * 255).astype("uint8"), 160)
-        #     item = cv.putText(item.detach().numpy(), "DI = {:.2f}".format(di), (0, 59), cv.FONT_HERSHEY_SIMPLEX, 0.2, 0)
-        # # di = [cv.putText(img, "DI = {:.2f}".format(self.__calculate_deformity_index((img.detach().numpy()*255).astype("uint8"), 160)), (40, 40), cv.FONT_HERSHEY_SIMPLEX, 1, 0) for img in self.__segmentation_crop_collection]
-        # # print(di)
+        #     di, dr = self.__calculate_deformity_metrics((item.detach().numpy() * 255).astype("uint8"), 160)
+
         frame_crops = torch.cat([item for item in self.__frame_crop_collection], 1)
         segmentation_crops = torch.cat([item for item in self.__segmentation_crop_collection], 1)
         background_crop = torch.cat([item * 255 for item in self.__clean_background_crop_collection], 1)
         combined_image = torch.cat((frame_crops, background_crop, segmentation_crops), 0)
-        # constriction_coordinates = [x for x in self.get_coordinate_list() if x[1] <= 290]
-        # if len(constriction_coordinates) >= 2:
-        #     self.__average_constriction_speed = (constriction_coordinates[-1][1] - constriction_coordinates[0][
-        #         1]) / len(
-        #         constriction_coordinates)
-        # speed_str = "{:.2f}".format(self.__average_constriction_speed).rjust(10, "0")
         cv.imwrite("{}cell_journey_{}.png".format(path, self.get_completion_id()),
                    combined_image.detach().numpy())
         del self.__segmentation_crop_collection, self.__frame_crop_collection, self.__clean_background_crop_collection
@@ -101,6 +84,10 @@ class Cell:
         self.kill()
 
     def __predict_next_coordinates(self):
+        """
+        Using cell momentum, predict next cell coordinates
+        :return: Predicted coordinates
+        """
         if len(self.get_coordinate_list()) > 1:
             previous_coordinates = self.get_coordinate_list()[-2]
             current_coordinates = self.get_coordinate_list()[-1]
@@ -111,6 +98,10 @@ class Cell:
             return np.array(prediction)
 
     def update(self, coordinates):
+        """
+        Predict and update the cell object with coordinates
+        :param coordinates: Sanity checked coordinates
+        """
         if self.__check_coordinates(coordinates) is not None:
             self.__coordinates.append(self.__check_coordinates(coordinates))
             prediction = self.__predict_next_coordinates()
@@ -133,6 +124,11 @@ class Cell:
         return self.get_coordinate_list()[-1]
 
     def __check_coordinates(self, coordinates, initial=False):
+        """
+        Sanity check for the coordinates
+        :param coordinates: Array of two items
+        :param initial: Indicates whether this is the first time entering a coordinate
+        """
         coordinates = np.array(coordinates)
 
         assert type(coordinates) is np.ndarray
@@ -144,6 +140,10 @@ class Cell:
         return coordinates
 
     def draw_personal_prediction(self, frame):
+        """
+        Draws for a single cell a circle around the current coordinate and draws a circle for the predicted coordinate with the radius being the momentum of the cell
+        :param frame: Frame to draw circles on
+        """
         current_coordinate = tuple(self.get_coordinate_list()[-1][::-1])
         predicted_coordinate = tuple(self.get_prediction()[::-1])
         radius = 30
@@ -153,13 +153,13 @@ class Cell:
                           thickness=2)
         frame = cv.circle(img=frame, center=predicted_coordinate, radius=radius - 15, color=self.__color,
                           thickness=1)
-        # frame = cv.arrowedLine(img=frame, pt1=tuple([current_coordinate[0] + radius, current_coordinate[1]]),
-        #                        pt2=tuple([predicted_coordinate[0] - radius-15, predicted_coordinate[1]]),
-        #                        color=self.__color)
-        # cv.imwrite("pred_{}.png".format(str(self.get_id())), frame)
         self.__prediction_images.append(frame)
 
     def draw_prediction(self, frame):
+        """
+        Draws a circle around the current coordinate and draws a circle for the predicted coordinate with the radius being the momentum of the cell
+        :param frame: Frame to draw circles on
+        """
         current_coordinate = tuple(self.get_coordinate_list()[-1][::-1])
         predicted_coordinate = tuple(self.get_prediction()[::-1])
         radius = 30
@@ -168,13 +168,6 @@ class Cell:
                           thickness=2)
         frame = cv.circle(img=frame, center=predicted_coordinate, radius=self.__speed, color=self.__color,
                           thickness=1)
-        # frame = cv.arrowedLine(img=frame, pt1=tuple([current_coordinate[0] + radius, current_coordinate[1]]),
-        #                        pt2=tuple([predicted_coordinate[0] - radius-15, predicted_coordinate[1]]),
-        #                        color=self.__color)
-
-    def write_prediction_images(self):
-        for i in range(len(self.__prediction_images)):
-            cv.imwrite("prediction_{}_{}.png".format(str(self.get_id())[:6], str(i)), self.__prediction_images[i])
 
     def is_alive(self):
         return self.__alive
@@ -183,12 +176,22 @@ class Cell:
         self.__alive = False
 
     def arrived(self, frame_num: int):
+        """
+        Cells that have arrived get a completion id that has the frame number and last prediction in it
+        :param frame_num: Frame number where cell completion happened
+        """
         self.__arrived = True
         prediction = [str(yx) for yx in self.get_prediction()]
         self.__completion_id = "{}_{}_{}".format(self.get_video_type(), str(frame_num),
                                                  ";".join(prediction))
 
-    def __calculate_deformity_index(self, img, threshold):
+    def __calculate_deformity_metrics(self, img, threshold):
+        """
+        Calculates the deformity index and deformity ratio for segmentation images
+        :param img: Segmentation image (binary)
+        :param threshold: Color threshold
+        :return: Deformity metrics
+        """
         ret, thresh = cv.threshold(img, threshold, 255, 0)
         contours, hierarchy = cv.findContours(thresh, 1, 2)
         cnt = contours[0]
@@ -202,7 +205,9 @@ class Cell:
         right, bottom = np.max(boxes, axis=0)[2:]
         x = right - left
         y = bottom - top
-        return (x - y) / (x + y)
+        di = (x - y) / (x + y)
+        dr = x / y
+        return di, dr
 
     def has_arrived(self):
         return self.__arrived
