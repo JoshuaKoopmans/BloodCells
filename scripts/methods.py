@@ -11,18 +11,51 @@ import scipy.stats as st
 
 randomness = random.randint
 
+"""
+This module contains all the functions used to manipulate images.
+"""
+
 
 def add_circle(image: np.ndarray, center: tuple, radius: int, color, thickness: int):
+    """
+    Adds a circle to an image
+    :param image: Image (numpy array)
+    :param center: Center coordinates of the circle
+    :param radius: Radius of the circle in pixels
+    :param color: Color of the circle in RGB
+    :param thickness: Thickness of circle in pixels
+    :return: Image with a circle
+    """
     return cv.circle(image, center=center, radius=radius, color=color, thickness=thickness)
 
 
 def add_half_circle(image: np.ndarray, center: tuple, axes: tuple, angle: int, start_angle: int, end_angle: int,
                     color, thickness: int):
+    """
+    Add a half-circle or a variation of it to an image
+    :param image: Image (numpy array)
+    :param center: Center coordinates of the (half)circle
+    :param axes: Degree of curvature of the circle
+    :param angle: Rotation angle in degrees
+    :param start_angle: Angle to start at in degrees
+    :param end_angle: Angle to stop at in degrees
+    :param color: Color of the circle in RGB
+    :param thickness: Thickness of circle in pixels
+    :return: Image with a half-circle
+    """
     return cv.ellipse(image, center=center, axes=axes, angle=angle, startAngle=start_angle, endAngle=end_angle,
                       color=color, thickness=thickness)
 
 
 def elastic(image, alpha, sigma, seed=None):
+    """
+    Warp an image
+    :param image: 2D Image (numpy array)
+    :param alpha: Steepness of curve
+    :param sigma: Standard deviation for the Gaussian kernel
+    :param seed: Random seed
+    :return: Warped image
+    """
     assert len(image.shape) == 2
     rs = np.random.RandomState(seed)
     shape = image.shape
@@ -33,18 +66,25 @@ def elastic(image, alpha, sigma, seed=None):
     return map_coordinates(image, indices, order=1).reshape(shape)
 
 
-def gaussian_peak_from_label(label: np.ndarray):
-    gauss2d = generate_instancing_labels(label)
-
-
 def blur(image: np.ndarray, kernel=None):
+    """
+    Applies blur to an image
+    :param image: Image
+    :param kernel: Kernel with intensity of blurring
+    :return: Blurred image
+    """
     if kernel is None:
         kernel = (3, 3)
     return cv.GaussianBlur(image, kernel, 0)
 
 
 def gaussian2d(kernel_lenght=21, sigma=8):
-    """Returns a 2D Gaussian kernel."""
+    """
+    Returns a 2D Gaussian kernel
+    :param kernel_lenght:
+    :param sigma: Standard deviation of the Gaussian kernel
+    :return: 2D Gaussian kernel
+    """
     x = np.linspace(-sigma, sigma, kernel_lenght + 1)
     kern1d = np.diff(st.norm.cdf(x))
     kern2d = np.outer(kern1d, kern1d)
@@ -53,32 +93,38 @@ def gaussian2d(kernel_lenght=21, sigma=8):
 
 
 def generate_instancing_labels(label: np.ndarray):
+    """
+    Places a Gaussian distribution in the center of a segmentation label.
+    :param label: Image of a cell label
+    :return: Gaussian distribution in the center of the label
+    """
     height, width = label.shape[:2]
     gauss2d = gaussian2d(height)
-    gauss2d = np.column_stack((gauss2d, np.zeros((gauss2d.shape[0], 25))))
-    gauss2d = np.column_stack((np.zeros((gauss2d.shape[0], 25)), gauss2d))
-    gauss2d = np.row_stack((gauss2d, np.zeros((25, gauss2d.shape[1]))))
-    gauss2d = np.row_stack((np.zeros((25, gauss2d.shape[1])), gauss2d))
-    x = torch.arange(0, 100).repeat(100, 1)
+    gauss2d = np.column_stack((gauss2d, np.zeros((gauss2d.shape[0], int(width / 4)))))
+    gauss2d = np.column_stack((np.zeros((gauss2d.shape[0], int(width / 4))), gauss2d))
+    gauss2d = np.row_stack((gauss2d, np.zeros((int(width / 4), gauss2d.shape[1]))))
+    gauss2d = np.row_stack((np.zeros((int(width / 4), gauss2d.shape[1])), gauss2d))
+    x = torch.arange(0, width).repeat(width, 1)
     y = x.T
     mat = torch.cat((x.unsqueeze(-1), y.unsqueeze(-1)), -1)
     white_is_better = mat[label == 255]
     x, y = torch.median(white_is_better, 0)[0]
-    x_off = 50 - round(x.item())
-    y_off = 50 - round(y.item())
-    gauss_label = label.copy()
-    gauss_label[label > 0] = (gauss2d[25 + y_off:125 + y_off, 25 + x_off:125 + x_off] * 255)[label > 0]
-    # cv.imwrite("grass.png", gauss*255)
+    x_off = int(width / 2) - round(x.item())
+    y_off = int(width / 2) - round(y.item())
+    gauss_label = np.zeros((width, height))
+    gauss_label[label > 0] = (gauss2d[int(width / 4) + y_off:int(width / 4) + int(width) + y_off,
+                              int(width / 4) + x_off:int(width / 4) + int(width) + x_off] * 255)[label > 0]
+    gauss = (gauss2d[int(width / 4) + y_off:int(width / 4) + int(width) + y_off,
+             int(width / 4) + x_off:int(width / 4) + int(width) + x_off] * 255)
     return gauss_label
 
-
-def add_background(image: np.ndarray):
-    back_col = random.randint(20 - 10, 20 + 10)
-    image[image < 5] = back_col
-    return image
-
-
 def warp_all_dim(image: np.ndarray, seed):
+    """
+    Warp all dimensions of a 3D image
+    :param image: 3D image
+    :param seed: Random seed
+    :return: Warped 3D image
+    """
     dims = len(image.shape)
     if dims == 3:
         for d in range(dims):
@@ -89,10 +135,24 @@ def warp_all_dim(image: np.ndarray, seed):
 
 
 def erode(image, kernel: np.ndarray, iterations=3):
+    """
+    Makes lines thinner by scanning an image with a kernel
+    :param image: Image
+    :param kernel: Size of scanning matrix
+    :param iterations: Amount of times to scan the image
+    :return: Eroded image
+    """
     return cv.erode(src=image, kernel=kernel, iterations=iterations)
 
 
 def dilate(image, kernel: tuple, iterations=3):
+    """
+    Makes lines in images thicker by scanning the image with a kernel
+    :param image: Image
+    :param kernel: Size of scanning matrix
+    :param iterations: Amount of times to scan the image
+    :return: Dilated image
+    """
     unique = set(kernel)
     if len(unique) != 1:
         error_message = "Kernel input violation: left integer == right integer must be true!"
@@ -107,16 +167,16 @@ def dilate(image, kernel: tuple, iterations=3):
 
 def create_bullet_cell(image, radius: int, x_offset: int, color, thickness: int, seed: int, memory=False):
     """
-
-    :param image:
-    :param radius:
-    :param x_offset:
-    :param color:
-    :param thickness:
-    :param seed:
-    :param memory_seed:
-    :param memory:
-    :return:
+    Using basic functions, create a template of a bullet-like cell
+    :param image: Image (numpy array)
+    :param radius: Radius of circles
+    :param x_offset: Horizontal distance between two circles
+    :param color: Color of the circle
+    :param thickness: Thickness of the circle
+    :param seed: Random seed
+    :param memory_seed: Existing seed
+    :param memory: Whether to use same parameters as the last time
+    :return: Image with bullet-like cell
     """
 
     # 180 at top, 360 at bottom, 090 at left, 270 right.
@@ -131,7 +191,7 @@ def create_bullet_cell(image, radius: int, x_offset: int, color, thickness: int,
     # RANDOM VARIATIONS
     x_offset_variation = random.randint(x_offset - 5, x_offset + 5)
     first_circle_curve_variation = random.randint(-5, 3)
-    second_circle_curve_variation = random.randint(-2, 1)
+    second_circle_curve_variation = random.randint(-2, 10)
     connecting_line_variation_upper = random.randint(0, 5)
     connecting_line_variation_lower = random.randint(0, 5)
     radius_variation = random.randint(-4, 3)
@@ -154,15 +214,136 @@ def create_bullet_cell(image, radius: int, x_offset: int, color, thickness: int,
                             end_angle=end_angle, color=color, thickness=thickness)
     image = add_half_circle(image, center=center_second, axes=axes_second, angle=angle, start_angle=start_angle,
                             end_angle=end_angle, color=color, thickness=thickness)
+    if memory:
+        image = cv.line(image, coordinates_first[0], coordinates_first[1], thickness=thickness, color=color)
+        image = cv.line(image, coordinates_second[0], coordinates_second[1], thickness=thickness, color=color)
+        return image
+    else:
+        return image, seed
+
+
+def create_straight_D_cells(image, radius: int, x_offset: int, color, thickness: int, seed: int, memory=False):
+    """
+    Using basic functions, create a template of a straight D-shaped bullet-like cell
+    :param image: Image (numpy array)
+    :param radius: Radius of circles
+    :param x_offset: Horizontal distance between two circles
+    :param color: Color of the circle
+    :param thickness: Thickness of the circle
+    :param seed: Random seed
+    :param memory_seed: Existing seed
+    :param memory: Whether to use same parameters as the last time
+    :return: Image with bullet-like cell
+    """
+
+    # 180 at top, 360 at bottom, 090 at left, 270 right.
+
+    # HALF CIRCLE PARAMETERS
+    angle = 90
+    start_angle = 180
+    end_angle = 360
+
+    random.seed(seed)
+
+    # RANDOM VARIATIONS
+    x_offset_variation = random.randint(x_offset - 5, x_offset + 5)
+    first_circle_curve_variation = random.randint(-5, 3)
+    connecting_line_variation_upper = random.randint(0, 5)
+    connecting_line_variation_lower = random.randint(0, 5)
+    radius_variation = random.randint(-4, 3)
+
+    width, height = image.shape[:2]
+
+    center_first = (int(width / 2), int(height / 2))
+    center_second = (center_first[0] + x_offset_variation, center_first[1])
+    axes = (int(radius), int(radius))
+    axes_first = (axes[0], axes[1] - first_circle_curve_variation)
+    coordinates_first = ((center_first[0], center_first[1] - radius),
+                         (center_second[0] - connecting_line_variation_upper,
+                          center_second[1] - radius - radius_variation))
+    coordinates_second = ((center_first[0], center_first[1] + radius),
+                          (center_second[0] - connecting_line_variation_lower,
+                           center_second[1] + radius + radius_variation))
+
+    image = add_half_circle(image, center=center_first, axes=axes_first, angle=angle, start_angle=start_angle,
+                            end_angle=end_angle, color=color, thickness=thickness)
+
     image = cv.line(image, coordinates_first[0], coordinates_first[1], thickness=thickness, color=color)
     image = cv.line(image, coordinates_second[0], coordinates_second[1], thickness=thickness, color=color)
+    image = cv.line(image, coordinates_first[1], coordinates_second[1], thickness=thickness, color=color)
     if memory:
         return image
     else:
         return image, seed
 
 
+def create_shadow_bullet_cells(image, radius: int, x_offset: int, color, thickness: int, seed: int, memory=False):
+    """
+    Using basic functions, create a template of a bullet-like cell with a shadow at the ;eft of the cell
+    :param image: Image (numpy array)
+    :param radius: Radius of circles
+    :param x_offset: Horizontal distance between two circles
+    :param color: Color of the circle
+    :param thickness: Thickness of the circle
+    :param seed: Random seed
+    :param memory_seed: Existing seed
+    :param memory: Whether to use same parameters as the last time
+    :return: Image with bullet-like cell
+    """
+    # 180 at top, 360 at bottom, 090 at left, 270 right.
+
+    # HALF CIRCLE PARAMETERS
+    angle = 90
+    start_angle = 180
+    end_angle = 360
+
+    random.seed(seed)
+
+    # RANDOM VARIATIONS
+    x_offset_variation = random.randint(x_offset - 5, x_offset + 5)
+    first_circle_curve_variation = random.randint(-5, 3)
+    second_circle_curve_variation = random.randint(-2, 10)
+    connecting_line_variation_upper = random.randint(0, 5)
+    connecting_line_variation_lower = random.randint(0, 5)
+    radius_variation = random.randint(-4, 3)
+
+    width, height = image.shape[:2]
+
+    center_first = (int(width / 2), int(height / 2))
+    center_second = (center_first[0] + x_offset_variation, center_first[1])
+    axes = (int(radius), int(radius))
+    axes_first = (axes[0], axes[1] - first_circle_curve_variation)
+    axes_second = (axes[0] + radius_variation, axes[1] - second_circle_curve_variation)
+    coordinates_first = ((center_first[0], center_first[1] - radius),
+                         (center_second[0] - connecting_line_variation_upper,
+                          center_second[1] - radius - radius_variation))
+    coordinates_second = ((center_first[0], center_first[1] + radius),
+                          (center_second[0] - connecting_line_variation_lower,
+                           center_second[1] + radius + radius_variation))
+
+    image = add_half_circle(image, center=center_first, axes=axes_first, angle=angle, start_angle=start_angle,
+                            end_angle=end_angle, color=color, thickness=thickness)
+    image = add_half_circle(image, center=center_second, axes=axes_second, angle=angle, start_angle=start_angle,
+                            end_angle=end_angle, color=color, thickness=thickness)
+
+    image = cv.line(image, coordinates_first[0], coordinates_first[1], thickness=thickness, color=color)
+    image = cv.line(image, coordinates_second[0], coordinates_second[1], thickness=thickness, color=color)
+    if memory:
+        image = image.copy()
+        shadow_image = cv.line(image, coordinates_first[1], coordinates_second[1], color=color, thickness=thickness)
+        return shadow_image
+    else:
+        return image, seed
+
+
 def genNoise(pixels, zoom=1, seed=-1):
+    """
+    Generates a noise pattern
+    :param pixels: Dimensions of the desired noise array
+    :param zoom: The degree of zoom on this noise pattern
+    :param seed: Random seed
+    :return: Numpy array
+    """
     if seed == -1: seed = random.randint(0, 10e6)
     gen = OpenSimplex(seed=seed)
     pix = np.linspace(0, pixels * zoom, pixels)
@@ -172,10 +353,22 @@ def genNoise(pixels, zoom=1, seed=-1):
 
 
 def minmax(noise, min=0, max=1):
+    """
+    Sets the minimum and maximum values of the items in the noise array
+    :param noise: Noise pattern numpy array
+    :param min: Desired minimum value
+    :param max: Desired maximum value
+    :return: Noise array with new minimum and maximum values
+    """
     return noise * (max - min) + min
 
 
 def to_3d(image: np.ndarray):
+    """
+    Turns a 2D image into a 3D image.
+    :param image: 2D image
+    :return: 3D image
+    """
     tmp = torch.zeros(image.shape[0], image.shape[1], 3)
     for i in range(3):
         tmp[:, :, i] = torch.from_numpy(image)
@@ -183,6 +376,14 @@ def to_3d(image: np.ndarray):
 
 
 def interpolation(img1, img2, imap, mask=None):
+    """
+    Combining two images based on a noise pattern and mask
+    :param img1: Image 1
+    :param img2: Image 1
+    :param imap:
+    :param mask: Mask to determine where imap should shine through
+    :return: Interpolated image
+    """
     if type(mask) == type(None): mask = np.ones((img1.shape[0], img1.shape[1]))
     try:
         mask.shape[1]
@@ -193,6 +394,13 @@ def interpolation(img1, img2, imap, mask=None):
 
 
 def background_border(width: int, height: int, seed=1):
+    """
+    Creates a microfluidic wall-like object
+    :param width: Width of image
+    :param height: Height of image
+    :param seed: Random seed
+    :return: Border wall image
+    """
     border = np.zeros((width, height))
     mask = border.copy()
 
@@ -233,7 +441,13 @@ def background_border(width: int, height: int, seed=1):
 
 
 def rotate_image(image: np.ndarray, angle):
-    # assert angle in range(0, 361, 1)
+    """
+    Rotates an image given an angle.
+    :param image: Image to be rotated
+    :param angle: Angle the image is to be rotated.
+    :return: Rotated image
+    """
+
     image_center = tuple(np.array(image.shape[1::-1]) / 2)
     rot_mat = cv.getRotationMatrix2D(image_center, angle, 1.0)
     result = cv.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv.INTER_LINEAR)
@@ -241,6 +455,12 @@ def rotate_image(image: np.ndarray, angle):
 
 
 def background_floaters(width: int, height: int):
+    """
+    Creates black and white background floating foreign obejcts
+    :param width: Width of image
+    :param height: Height of image
+    :return: Foreign objects
+    """
     center = (randomness(5, width - 5), randomness(5, height - 5))
     radius_outer = 2 + randomness(0, 3)
     radius_inner = radius_outer + randomness(-2, 0)
@@ -278,6 +498,17 @@ def background_floaters(width: int, height: int):
 
 def base_background(width: int, height: int, seed: int, color_variation=(-35, 35), border_memory=None, mask_memory=None,
                     draw_border=True):
+    """
+    Creates a base background on which items such as borders and foreign objects are placed.
+    :param width: Width of image
+    :param height: Height of image
+    :param seed: Random seed
+    :param color_variation: Random color variation to apply on alternative background image
+    :param border_memory: Use existing border
+    :param mask_memory: Use existing mask
+    :param draw_border: Whether to draw a border on the background
+    :return: Base background image
+    """
     background_color_variation = randomness(color_variation[0], color_variation[1])
     if border_memory is None or mask_memory is None:
         border, mask = background_border(width, height)
@@ -303,7 +534,6 @@ def base_background(width: int, height: int, seed: int, color_variation=(-35, 35
     if not draw_border:
         mask = np.zeros((width, height))
     background = background * (1 - mask) + border * mask
-    # color_indication = np.round(np.median(np.median(background, 0), 0))
 
     if (border_memory is not None) or (mask_memory is not None):
         return background
@@ -312,6 +542,14 @@ def base_background(width: int, height: int, seed: int, color_variation=(-35, 35
 
 
 def background(width: int, height: int, seed: int, alternative=False):
+    """
+    Combines all background function to create the final backgrounds used to put a cell onto.
+    :param width: Width of image
+    :param height: Height of image
+    :param seed: Random seed
+    :param alternative: Whether a background with slight variations should be created
+    :return: Final background image
+    """
     if random.random() > 0.4:
         draw_borders = True
     else:
@@ -335,11 +573,10 @@ def background(width: int, height: int, seed: int, alternative=False):
         alt_background *= pixels
 
     if random.random() > 0.1:
-        # kleine zwarte en witte drolletjes
+        # White and black round foreign objects
         if random.random() > 0.33:
             pixels, mask = background_floaters(width, height)
             background = background * (1 - mask) + pixels * mask
-
 
     if random.random() > 0.7:
         stripe = np.zeros((width, height))
@@ -352,7 +589,7 @@ def background(width: int, height: int, seed: int, alternative=False):
         alt_background *= (255 - stripe) / 255
     if alternative:
         if random.random() > 0.1:
-            # kleine zwarte en witte drolletjes
+            # White and black round foreign objects
             pixels, mask = background_floaters(width, height)
             alt_background = alt_background * (1 - mask) + pixels * mask
 
