@@ -24,7 +24,7 @@ else:
     prefix = os.environ.get("PREFIX")
 
 
-def round_red_blood_cell():
+def round_red_blood_cell(*args):
     """
     Function to create synthetic round red blood cells
     by manipulating a combination of basic circles with transformations and effects
@@ -142,7 +142,7 @@ def round_red_blood_cell():
     return cell, label, alt, label_gauss
 
 
-def bullet_red_blood_cell():
+def bullet_red_blood_cell(*args):
     """
     Function to create synthetic bullet-like red blood cells
     by manipulating a combination of basic half-circles connected by lines with transformations and effects
