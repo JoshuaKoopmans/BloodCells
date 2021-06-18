@@ -11,5 +11,5 @@ jobs:
     - uses: actions/checkout@v1
     - name: Run all unittests
       run: |
-        python -m unittest discover tests/test_*.py
+        python -m unittest discover tests/
         
