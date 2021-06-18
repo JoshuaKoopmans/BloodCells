@@ -1,0 +1,15 @@
+name: Run unittests
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Run all unittests
+      run: |
+        python -m unittest discover tests/*.py
+        
