@@ -1,7 +1,7 @@
 import cv2
 import torch.optim
 
-from Models import *
+from scripts.Models import *
 from skimage.feature import peak_local_max
 from datetime import datetime
 import os

@@ -7,7 +7,7 @@ import torch
 import os
 from skimage.segmentation import flood_fill
 from multiprocessing import Pool, cpu_count
-from methods import minmax, genNoise, blur, elastic, rotate_image, create_bullet_cell, create_shadow_bullet_cells, \
+from scripts.methods import minmax, genNoise, blur, elastic, rotate_image, create_bullet_cell, create_shadow_bullet_cells, \
     create_straight_D_cells, generate_instancing_labels, add_circle, background, dilate
 
 """
