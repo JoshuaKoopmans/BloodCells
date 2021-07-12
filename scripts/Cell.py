@@ -1,8 +1,11 @@
+import json
 import os.path
 import random
 import numpy as np
 import torch
 import cv2 as cv
+
+import scripts.methods
 
 """
 Cell class used to track individual cells throughout videos
@@ -17,6 +20,7 @@ class Cell:
         self.__id = random.random() * 10000
         self.__video_type = video_type
         self.__background = median_background
+        self.__median_x_coordinate_end_border = self.__calculate_median_x_coordinate_border_end()
         self.__speed = 45
         self.__direction = None
         self.__initial_coordinate_offset = 10
@@ -33,11 +37,10 @@ class Cell:
         self.__segmentation_crop_collection = []
         self.__frame_crop_collection = []
         self.__clean_background_crop_collection = []
-        self.__DAN_segmentation_crop_collection = []
-        self.__DAN_frame_crop_collection = []
-        self.__DAN_clean_background_crop_collection = []
         self.__completion_id = None
-        self.__average_constriction_speed = ""
+        self.__left_right_border = {
+            "left": {"deformity_metrics": {"deformity_index": [], "deformity_ratio": []}, "frame_crops": []},
+            "right": {"deformity_metrics": {"deformity_index": [], "deformity_ratio": []}, "frame_crops": []}}
 
     def extract_segmentation(self, segmentation: np.ndarray, frame: np.ndarray):
         """
@@ -59,6 +62,10 @@ class Cell:
             self.__segmentation_crop_collection.append(torch.tensor(segmentation_crop))
             self.__frame_crop_collection.append(torch.tensor(frame_crop))
             self.__clean_background_crop_collection.append(torch.tensor(clean_background_crop))
+            if x < self.__median_x_coordinate_end_border:
+                self.__left_right_border["left"]["frame_crops"].append(torch.tensor(frame_crop).detach().numpy())
+            elif x > self.__median_x_coordinate_end_border:
+                self.__left_right_border["right"]["frame_crops"].append(torch.tensor(frame_crop).detach().numpy())
 
     def make_journey_collage(self, path_prefix=""):
         """
@@ -70,8 +77,17 @@ class Cell:
         if not os.path.isdir(path):
             os.mkdir(path)
 
-        # for item in self.__segmentation_crop_collection:
-        #     di, dr = self.__calculate_deformity_metrics((item.detach().numpy() * 255).astype("uint8"), 160)
+        for frame_crop in self.__left_right_border["left"]["frame_crops"]:
+            di, dr = self.__calculate_deformity_metrics((frame_crop * 255).astype("uint8"), 160)
+            self.__left_right_border["left"]["deformity_metrics"]["deformity_index"].append(di)
+            self.__left_right_border["left"]["deformity_metrics"]["deformity_ratio"].append(dr)
+
+        for frame_crop in self.__left_right_border["right"]["frame_crops"]:
+            di, dr = self.__calculate_deformity_metrics((frame_crop * 255).astype("uint8"), 160)
+            self.__left_right_border["right"]["deformity_metrics"]["deformity_index"].append(di)
+            self.__left_right_border["right"]["deformity_metrics"]["deformity_ratio"].append(dr)
+
+        json.dump(self.__left_right_border, open("data_{}.json".format(self.get_completion_id()), "w"), cls=NumpyEncoder)
 
         frame_crops = torch.cat([item for item in self.__frame_crop_collection], 1)
         segmentation_crops = torch.cat([item for item in self.__segmentation_crop_collection], 1)
@@ -80,7 +96,6 @@ class Cell:
         cv.imwrite("{}cell_journey_{}.png".format(path, self.get_completion_id()),
                    combined_image.detach().numpy())
         del self.__segmentation_crop_collection, self.__frame_crop_collection, self.__clean_background_crop_collection
-        del self.__DAN_clean_background_crop_collection, self.__DAN_segmentation_crop_collection, self.__DAN_frame_crop_collection
         self.kill()
 
     def __predict_next_coordinates(self):
@@ -209,6 +224,22 @@ class Cell:
         dr = x / y
         return di, dr
 
+    def __calculate_median_x_coordinate_border_end(self, threshold=70):
+        """
+        Determine median X coordinate of end of border wall in median frame.
+        :param median_frame: Image of median frame
+        :param threshold: Threshold used for binarization
+        :return: Median X coordinate
+        """
+        img = self.__background.detach().numpy()[0, :, :]
+        # img = cv.medianBlur(self.__background.detach().numpy(), 5)
+        sobel_x = cv.Sobel(img, cv.CV_64F, 1, 0, ksize=5) ** 2
+        x = ((sobel_x / sobel_x.max()) * 255).astype('uint8')
+        _, threshold = cv.threshold(x, 70, 255, cv.THRESH_BINARY)
+        _, x = (threshold > 0).nonzero()
+        median_x = int(np.median(x, 0))
+        return median_x
+
     def has_arrived(self):
         return self.__arrived
 
@@ -223,3 +254,20 @@ class Cell:
 
     def get_completion_id(self):
         return self.__completion_id
+
+    def get_frame_crops(self):
+        return self.__frame_crop_collection
+
+    def get_left_right_dict(self):
+        return self.__left_right_border
+
+class NumpyEncoder(json.JSONEncoder):
+    """ Special json encoder for numpy types """
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)

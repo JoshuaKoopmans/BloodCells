@@ -28,7 +28,7 @@ def get_coordinates(img, verbose=False) -> (torch.Tensor, np.ndarray):
     if type(img) is torch.Tensor:
         img = img.detach().numpy()
     img2 = img.copy()
-    coordinates = peak_local_max(blur(img, (3, 3)), threshold_abs=.3, min_distance=10)  # (7,7), 0.3, 10
+    coordinates = peak_local_max(blur(img, (3, 3)), threshold_abs=.2, min_distance=10)  # (7,7), 0.3, 10
     if verbose:
         n_circles_drawn = len(coordinates)
         print(n_circles_drawn)

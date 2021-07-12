@@ -118,6 +118,7 @@ def generate_instancing_labels(label: np.ndarray):
              int(width / 4) + x_off:int(width / 4) + int(width) + x_off] * 255)
     return gauss_label
 
+
 def warp_all_dim(image: np.ndarray, seed):
     """
     Warp all dimensions of a 3D image
