@@ -171,7 +171,7 @@ def get_file_extension(path: str) -> tuple:
 track_images = dict()
 
 
-def process_frame(video_path, median_path, frame_num_start, frame_num_end, file_suffix):
+def process_frame(video_path, median_path, frame_num_start, frame_num_end):
     """
     Track cells in a chunk of frames
     :param video_path: Path to video
