@@ -4,12 +4,32 @@ import random
 import numpy as np
 import torch
 import cv2 as cv
-
+import imageio
 import scripts.methods
 
 """
 Cell class used to track individual cells throughout videos
 """
+
+
+def extractCrop(frame, center=(50, 50), cropSize=128):
+    halfCrop = int(cropSize / 2)
+    frameSize = frame.shape
+    crop = np.zeros((cropSize, cropSize))
+    # These values are to get the frame indexi
+    left = max(center[1] - halfCrop, 0)
+    right = min(frameSize[1], center[1] + halfCrop)
+    top = max(center[0] - halfCrop, 0)
+    bottom = min(frameSize[0], center[0] + halfCrop)
+    # These values are for the crop
+    cLeft = left + halfCrop - center[1]
+    cRight = cropSize - (center[1] + halfCrop - right)
+    cTop = top + halfCrop - center[0]
+    cBottom = cropSize - (center[0] + halfCrop - bottom)
+
+    crop[cTop:cBottom, cLeft:cRight] = frame[top:bottom, left:right]
+
+    return crop
 
 
 class Cell:
@@ -38,9 +58,6 @@ class Cell:
         self.__frame_crop_collection = []
         self.__clean_background_crop_collection = []
         self.__completion_id = None
-        self.__left_right_border = {
-            "left": {"deformity_metrics": {"deformity_index": [], "deformity_ratio": []}, "frame_crops": []},
-            "right": {"deformity_metrics": {"deformity_index": [], "deformity_ratio": []}, "frame_crops": []}}
 
     def extract_segmentation(self, segmentation: np.ndarray, frame: np.ndarray):
         """
@@ -50,22 +67,20 @@ class Cell:
         """
         frame = frame.copy()
         segmentation = segmentation.copy()
-        offset = 32
+        offset = 64
         desired_shape = (offset * 2, offset * 2)
         current_coordinate = self.get_current_coordinate()
         y = current_coordinate[0]
         x = current_coordinate[1]
-        segmentation_crop = segmentation[0, y - offset:y + offset, x - offset:x + offset]
-        frame_crop = frame[y - offset:y + offset, x - offset:x + offset][:, :, 0]
-        clean_background_crop = self.__background.detach().numpy()[0, y - offset:y + offset, x - offset:x + offset]
+
+        segmentation_crop = extractCrop(segmentation[0, :, :], (y, x))
+        frame_crop = extractCrop(frame[:, :, 0], (y, x))
+        clean_background_crop = extractCrop(self.__background.detach().numpy()[0, :, :], (y, x))
+
         if segmentation_crop.shape == desired_shape and frame_crop.shape == desired_shape and clean_background_crop.shape == desired_shape:
             self.__segmentation_crop_collection.append(torch.tensor(segmentation_crop))
             self.__frame_crop_collection.append(torch.tensor(frame_crop))
             self.__clean_background_crop_collection.append(torch.tensor(clean_background_crop))
-            if x < self.__median_x_coordinate_end_border:
-                self.__left_right_border["left"]["frame_crops"].append(torch.tensor(frame_crop).detach().numpy())
-            elif x > self.__median_x_coordinate_end_border:
-                self.__left_right_border["right"]["frame_crops"].append(torch.tensor(frame_crop).detach().numpy())
 
     def make_journey_collage(self, path_prefix=""):
         """
@@ -73,22 +88,6 @@ class Cell:
         :param path_prefix: Path prefix for filename
         """
         path = "{}{}/".format(path_prefix, self.get_video_type())
-
-        if not os.path.isdir(path):
-            os.mkdir(path)
-
-        for frame_crop in self.__left_right_border["left"]["frame_crops"]:
-            di, dr = self.__calculate_deformity_metrics((frame_crop * 255).astype("uint8"), 160)
-            self.__left_right_border["left"]["deformity_metrics"]["deformity_index"].append(di)
-            self.__left_right_border["left"]["deformity_metrics"]["deformity_ratio"].append(dr)
-
-        for frame_crop in self.__left_right_border["right"]["frame_crops"]:
-            di, dr = self.__calculate_deformity_metrics((frame_crop * 255).astype("uint8"), 160)
-            self.__left_right_border["right"]["deformity_metrics"]["deformity_index"].append(di)
-            self.__left_right_border["right"]["deformity_metrics"]["deformity_ratio"].append(dr)
-
-        json.dump(self.__left_right_border, open("data_{}.json".format(self.get_completion_id()), "w"), cls=NumpyEncoder)
-
         frame_crops = torch.cat([item for item in self.__frame_crop_collection], 1)
         segmentation_crops = torch.cat([item for item in self.__segmentation_crop_collection], 1)
         background_crop = torch.cat([item * 255 for item in self.__clean_background_crop_collection], 1)
@@ -257,17 +256,3 @@ class Cell:
 
     def get_frame_crops(self):
         return self.__frame_crop_collection
-
-    def get_left_right_dict(self):
-        return self.__left_right_border
-
-class NumpyEncoder(json.JSONEncoder):
-    """ Special json encoder for numpy types """
-    def default(self, obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-        elif isinstance(obj, np.floating):
-            return float(obj)
-        elif isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return json.JSONEncoder.default(self, obj)

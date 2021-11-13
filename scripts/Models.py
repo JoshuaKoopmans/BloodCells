@@ -128,7 +128,7 @@ class NetExperiment(nn.Module):
 
         self.conv9 = nn.Conv2d(in_channels=16, out_channels=1, kernel_size=5)
 
-        self.softmax = nn.Softmax(dim=2)
+        self.softmax = nn.Softmax(dim=1)
 
         self.relu = nn.ReLU()
 
