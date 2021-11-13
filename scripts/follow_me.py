@@ -182,7 +182,7 @@ def process_frame(video_path, median_path, frame_num_start, frame_num_end, file_
     frame_num = 0
     cap = cv.VideoCapture(video_path)
     name, ext = get_file_extension(video_path)
-    video_type = name + file_suffix
+    video_type = name
     median_background = torch.tensor(cv.imread(median_path, 0)).unsqueeze(0) / 255
     cells = []
     track_images[video_type] = [[], []]
@@ -227,6 +227,5 @@ if __name__ == '__main__':
     median_path = sys.argv[2]
     start_index = int(sys.argv[3])
     end_index = int(sys.argv[4])
-    file_suffix = str(sys.argv[5])
 
-    process_frame(video_path, median_path, start_index, end_index, file_suffix)
+    process_frame(video_path, median_path, start_index, end_index)
