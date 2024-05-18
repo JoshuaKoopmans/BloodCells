@@ -2,6 +2,8 @@
 
 ![Example tracking GIF](examples/presentation_no_gauss_tracking.gif)
 
+[Click here to read paper](https://doi.org/10.1016/j.isci.2023.108542)
+
 ## Environment Prerequisites
 ### Conda
 1. Install [miniconda](https://docs.conda.io/en/latest/miniconda.html)
